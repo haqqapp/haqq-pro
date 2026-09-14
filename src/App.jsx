@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase, supabaseConfigured } from "./supabase.js";
 
 /* ---------------------------------------------------------------- Konstanten */
-const KEY = "firtinaspor3-v1";
+const KEY = "haqq-pro-demo-v1";
 const POS = ["TW", "IV", "LV", "RV", "DM", "ZM", "OM", "LM", "RM", "MS"];
 const POS_LANG = {
   TW: "Torwart", IV: "Innenverteidiger", LV: "Linksverteidiger", RV: "Rechtsverteidiger",
@@ -58,68 +58,68 @@ const REIHEN = {
 
 /* ---------------------------------------------------------------- Startdaten */
 const T_DATEN = {
-  Ahmad: [14, 15], Ayhan: [1, 3, 5, 6, 7, 9, 10, 14, 15], Burak: [],
-  Cemil: [1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13, 14], Dawin: [1, 2, 4, 6, 7, 8, 9, 10, 12],
-  Emre: [1, 3, 12, 13, 14], Ercan: [1, 8, 9, 11], Fabian: [1, 2, 4, 6, 10, 12],
-  Fatih: [1, 10, 11], Gökhan: [1], Göktan: [2, 4, 10, 12], Konate: [],
-  Marcel: [1, 9], Max: [4, 6, 8, 9, 10, 11, 12], Mevlüt: [15], Muharrem: [9],
-  Nesat: [], Okan: [4, 5, 8, 9, 10, 11, 12, 13, 14, 15], Ridvan: [1, 2], Sait: [7, 10],
-  Selçuk: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15],
-  Serdar: [1, 2, 6, 7, 8, 9, 10, 11, 12, 13, 14], Stephan: [],
-  Timur: [1, 5, 10, 11, 14], Tobias: [1, 7, 8, 9, 10, 12, 15],
-  Tolga: [1, 2, 3, 4, 6, 7, 12, 13, 14, 15], Tugay: [1, 2], Yassin: [14, 15],
+  Leon: [14, 15], Jonas: [1, 3, 5, 6, 7, 9, 10, 14, 15], Emir: [],
+  Milan: [1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13, 14], Noah: [1, 2, 4, 6, 7, 8, 9, 10, 12],
+  Luca: [1, 3, 12, 13, 14], Elias: [1, 8, 9, 11], Finn: [1, 2, 4, 6, 10, 12],
+  Kerem: [1, 10, 11], Mert: [1], David: [2, 4, 10, 12], Malik: [],
+  Julian: [1, 9], Paul: [4, 6, 8, 9, 10, 11, 12], Can: [15], Nico: [9],
+  Tim: [], Ben: [4, 5, 8, 9, 10, 11, 12, 13, 14, 15], Deniz: [1, 2], Samuel: [7, 10],
+  Arda: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15],
+  Robin: [1, 2, 6, 7, 8, 9, 10, 11, 12, 13, 14], Tom: [],
+  Yusuf: [1, 5, 10, 11, 14], Jan: [1, 7, 8, 9, 10, 12, 15],
+  Mika: [1, 2, 3, 4, 6, 7, 12, 13, 14, 15], Ali: [1, 2], Kaan: [14, 15],
 };
 const T_TERMINE = ["2026-07-07","2026-07-09","2026-07-14","2026-07-21","2026-07-23",
   "2026-08-04","2026-08-11","2026-08-18","2026-08-20","2026-08-25","2026-08-27",
   "2026-09-01","2026-09-03","2026-09-08","2026-09-10","2026-09-15"];
 
 const N_DATEN = {
-  Ayhan: { 1: 7.5, 2: 8, 3: 8, 4: 6, 5: 8.25 }, Burak: { 6: 7.5 },
-  Cemil: { 1: 6.5, 2: 7.25, 3: 8, 4: 8, 5: 8, 7: 6.5 },
-  Dawin: { 1: 7.5, 2: 7.25, 3: 8.5, 4: 8, 5: 7.5, 6: 8 },
-  Emre: { 1: 7, 2: 6, 6: 7, 7: 7 }, Ercan: { 1: 7.5, 2: 6.25, 5: 7.75, 6: 8, 7: 9 },
-  Fabian: { 1: 4, 2: 5.5, 4: 5, 5: 4.5 }, Fatih: { 6: 9, 7: 8 }, Gökhan: { 4: 6 },
-  Göktan: { 1: 7, 2: 6.25, 3: 6, 5: 6.75, 6: 8 }, Konate: { 1: 7, 2: 7.75, 3: 8, 4: 8.5 },
-  Marcel: { 3: 8, 4: 6, 5: 8, 6: 8, 7: 8 }, Max: { 1: 6.5, 2: 7.25, 3: 7.5, 4: 6, 5: 7.25, 6: 7.5 },
-  Okan: { 3: 6.5, 6: 6.5, 7: 6 }, Ridvan: { 1: 8, 2: 6, 7: 7.5 }, Sait: { 2: 8.5, 5: 8, 6: 9 },
-  Selçuk: { 2: 7.25, 5: 7.5, 6: 8.5, 7: 7.5 }, Serdar: { 3: 7.5, 4: 8.5, 5: 7.75, 6: 9, 7: 8 },
-  Stephan: { 5: 9, 6: 10, 7: 8 }, Timur: { 1: 6, 2: 6.5, 3: 7, 4: 6, 6: 7, 7: 6 },
-  Tobias: { 4: 6.5, 5: 6, 6: 8, 7: 8 }, Tolga: { 1: 7.5, 2: 7.25, 4: 7.5, 6: 7, 7: 7 },
-  Tugay: { 1: 7.5, 5: 8, 7: 8 },
+  Jonas: { 1: 7.5, 2: 8, 3: 8, 4: 6, 5: 8.25 }, Emir: { 6: 7.5 },
+  Milan: { 1: 6.5, 2: 7.25, 3: 8, 4: 8, 5: 8, 7: 6.5 },
+  Noah: { 1: 7.5, 2: 7.25, 3: 8.5, 4: 8, 5: 7.5, 6: 8 },
+  Luca: { 1: 7, 2: 6, 6: 7, 7: 7 }, Elias: { 1: 7.5, 2: 6.25, 5: 7.75, 6: 8, 7: 9 },
+  Finn: { 1: 4, 2: 5.5, 4: 5, 5: 4.5 }, Kerem: { 6: 9, 7: 8 }, Mert: { 4: 6 },
+  David: { 1: 7, 2: 6.25, 3: 6, 5: 6.75, 6: 8 }, Malik: { 1: 7, 2: 7.75, 3: 8, 4: 8.5 },
+  Julian: { 3: 8, 4: 6, 5: 8, 6: 8, 7: 8 }, Paul: { 1: 6.5, 2: 7.25, 3: 7.5, 4: 6, 5: 7.25, 6: 7.5 },
+  Ben: { 3: 6.5, 6: 6.5, 7: 6 }, Deniz: { 1: 8, 2: 6, 7: 7.5 }, Samuel: { 2: 8.5, 5: 8, 6: 9 },
+  Arda: { 2: 7.25, 5: 7.5, 6: 8.5, 7: 7.5 }, Robin: { 3: 7.5, 4: 8.5, 5: 7.75, 6: 9, 7: 8 },
+  Tom: { 5: 9, 6: 10, 7: 8 }, Yusuf: { 1: 6, 2: 6.5, 3: 7, 4: 6, 6: 7, 7: 6 },
+  Jan: { 4: 6.5, 5: 6, 6: 8, 7: 8 }, Mika: { 1: 7.5, 2: 7.25, 4: 7.5, 6: 7, 7: 7 },
+  Ali: { 1: 7.5, 5: 8, 7: 8 },
 };
 
 const KADER_START = [
-  ["Ahmad", "TW", 0, false], ["Ayhan", "TW", 0, true], ["Burak", "ZM", 0, false],
-  ["Cemil", "LV", 0, false], ["Dawin", "RV", 0, true], ["Emre", "IV", 0, true],
-  ["Ercan", "MS", 0, true], ["Fabian", "RM", 0, false], ["Fatih", "LV", 0, true],
-  ["Gökhan", "MS", 0, false], ["Göktan", "IV", 0, true], ["Konate", "LM", 5, false],
-  ["Marcel", "LV", 0, true], ["Max", "ZM", 0, true], ["Mevlüt", "DM", 8, false],
-  ["Muharrem", "IV", 0, false], ["Nesat", "TW", 0, false], ["Okan", "RM", 0, true],
-  ["Ridvan", "IV", 0, true], ["Sait", "DM", 0, true], ["Selçuk", "OM", 0, true],
-  ["Serdar", "ZM", 0, true], ["Stephan", "LM", 0, true], ["Timur", "DM", 0, true],
-  ["Tobias", "RV", 0, true], ["Tolga", "ZM", 0, true], ["Tugay", "MS", 0, false],
-  ["Yassin", "IV", 0, true],
+  ["Leon", "TW", 0, false], ["Jonas", "TW", 0, true], ["Emir", "ZM", 0, false],
+  ["Milan", "LV", 0, false], ["Noah", "RV", 0, true], ["Luca", "IV", 0, true],
+  ["Elias", "MS", 0, true], ["Finn", "RM", 0, false], ["Kerem", "LV", 0, true],
+  ["Mert", "MS", 0, false], ["David", "IV", 0, true], ["Malik", "LM", 5, false],
+  ["Julian", "LV", 0, true], ["Paul", "ZM", 0, true], ["Can", "DM", 8, false],
+  ["Nico", "IV", 0, false], ["Tim", "TW", 0, false], ["Ben", "RM", 0, true],
+  ["Deniz", "IV", 0, true], ["Samuel", "DM", 0, true], ["Arda", "OM", 0, true],
+  ["Robin", "ZM", 0, true], ["Tom", "LM", 0, true], ["Yusuf", "DM", 0, true],
+  ["Jan", "RV", 0, true], ["Mika", "ZM", 0, true], ["Ali", "MS", 0, false],
+  ["Kaan", "IV", 0, true],
 ];
 
 const SPIELE_START = [
-  [1, "2026-07-12", "11:00", "TGD Essen-West 4", "", "Freundschaft", null, null],
-  [2, "2026-07-19", "13:00", "RWT Herne 79/09 II", "", "Freundschaft", null, null],
-  [3, "2026-07-26", "13:00", "OB HL", "", "Freundschaft", null, null],
-  [4, "2026-08-02", "17:00", "Ugarit FC", "", "Freundschaft", null, null],
-  [5, "2026-08-23", "15:00", "FC Herne 57", "A", "Kreisliga C", 5, 4],
-  [6, "2026-08-30", "17:00", "Zonguldakspor Bickern II", "H", "Kreisliga C", 8, 1],
-  [7, "2026-09-06", "11:00", "SC Constantin Herne II", "A", "Kreisliga C", 6, 3],
-  [8, "", "", "SF Stuckenbusch-Hochlarmark", "", "Freundschaft", null, null],
-  [9, "2026-09-27", "17:00", "VfB Börnig III", "H", "Kreisliga C", null, null],
-  [10, "2026-10-04", "13:00", "SpVgg. Röhlinghausen III", "A", "Kreisliga C", null, null],
-  [11, "2026-10-11", "13:00", "ESV Herne III", "H", "Kreisliga C", null, null],
-  [12, "2026-10-18", "13:00", "RSV Wanne II", "A", "Kreisliga C", null, null],
-  [13, "2026-10-25", "19:00", "Spvg. Arminia Holsterhausen II", "H", "Kreisliga C", null, null],
-  [14, "2026-11-08", "15:00", "DJK Wanne-Eickel 88 II", "A", "Kreisliga C", null, null],
-  [15, "2026-11-15", "17:00", "ASC Leone III", "A", "Kreisliga C", null, null],
-  [16, "2026-11-29", "17:00", "Eintracht Ickern III", "H", "Kreisliga C", null, null],
-  [17, "2026-12-06", "17:00", "Spiel-Club Röhlinghausen", "H", "Kreisliga C", null, null],
-  [18, "2026-12-13", "13:00", "Blau Weiß Börnig II", "A", "Kreisliga C", null, null],
+  [1, "2026-07-12", "11:00", "SV Weststadt IV", "", "Freundschaft", null, null],
+  [2, "2026-07-19", "13:00", "FC Nordring II", "", "Freundschaft", null, null],
+  [3, "2026-07-26", "13:00", "VfL Höhenfeld", "", "Freundschaft", null, null],
+  [4, "2026-08-02", "17:00", "Anadolu 09", "", "Freundschaft", null, null],
+  [5, "2026-08-23", "15:00", "SV Grün-Weiß 57", "A", "Kreisliga C", 5, 4],
+  [6, "2026-08-30", "17:00", "SC Rot-Weiß Bickern II", "H", "Kreisliga C", 8, 1],
+  [7, "2026-09-06", "11:00", "TSV Constantin II", "A", "Kreisliga C", 6, 3],
+  [8, "", "", "Sportfreunde Hochfeld", "", "Freundschaft", null, null],
+  [9, "2026-09-27", "17:00", "VfB Nordstadt III", "H", "Kreisliga C", null, null],
+  [10, "2026-10-04", "13:00", "SpVgg. Südpark III", "A", "Kreisliga C", null, null],
+  [11, "2026-10-11", "13:00", "ESV West III", "H", "Kreisliga C", null, null],
+  [12, "2026-10-18", "13:00", "RSV Mitte II", "A", "Kreisliga C", null, null],
+  [13, "2026-10-25", "19:00", "Arminia West II", "H", "Kreisliga C", null, null],
+  [14, "2026-11-08", "15:00", "DJK Eichen 88 II", "A", "Kreisliga C", null, null],
+  [15, "2026-11-15", "17:00", "ASC Viktoria III", "A", "Kreisliga C", null, null],
+  [16, "2026-11-29", "17:00", "Eintracht Ost III", "H", "Kreisliga C", null, null],
+  [17, "2026-12-06", "17:00", "SC Südpark", "H", "Kreisliga C", null, null],
+  [18, "2026-12-13", "13:00", "Blau-Weiß Nord II", "A", "Kreisliga C", null, null],
 ];
 
 function startDaten() {
@@ -255,7 +255,7 @@ function useDaten(session) {
     laden();
 
     const channel = supabase
-      .channel("firtinaspor-app-state-v4")
+      .channel("haqq-pro-app-state-v1")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "app_state", filter: "id=eq.main" },
@@ -1057,7 +1057,7 @@ function Spielplan({ d, save }) {
     <div className="pb-24">
       <Kopf titel="Spielplan" rechts={<button onClick={neuesSpiel} className="text-sm font-bold px-3 py-1.5 rounded-full" style={{background:C.rot,color:'#fff'}}>+ Spiel</button>} />
       <div className="px-4 pb-3 text-sm" style={{ color: C.grau }}>
-        Kreisliga C2 Kreis Herne · Saison 26/27
+        Bezirksliga Demo · Saison 26/27
       </div>
 
       <div className="px-4 pb-4">
@@ -1489,14 +1489,14 @@ function VerlaufExport({ d, save, berechnet }) {
     d.spiele.forEach(sp=>d.spieler.forEach(s=>{const n=spielNote(d,sp.nr,s.name);if(n!=null)rows.push([sp.gegner,sp.datum,s.name,n.toFixed(2),d.spielPositionen?.['g'+sp.nr]?.[s.name]||''])}));
 
     const sheetRows=rows.map(r=>`<Row>${r.map(v=>`<Cell><Data ss:Type="String">${escXml(v)}</Data></Cell>`).join('')}</Row>`).join('');
-    const xml=`<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>\n<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Firtinaspor"><Table>${sheetRows}</Table></Worksheet></Workbook>`;
-    const filename=`firtinaspor-export-${heute()}.xls`;
+    const xml=`<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>\n<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="HAQQ Pro"><Table>${sheetRows}</Table></Worksheet></Workbook>`;
+    const filename=`haqq-pro-export-${heute()}.xls`;
     const blob=new Blob([xml],{type:'application/vnd.ms-excel;charset=utf-8'});
     const file=new File([blob],filename,{type:'application/vnd.ms-excel'});
 
     // iPhone/PWA: Teilen-Dialog ist zuverlässiger als ein unsichtbarer Browser-Download.
     if (navigator.share && navigator.canShare?.({files:[file]})) {
-      try { await navigator.share({files:[file],title:'Firtinaspor Excel Export'}); return; }
+      try { await navigator.share({files:[file],title:'HAQQ Pro Excel Export'}); return; }
       catch (e) { if (e?.name === 'AbortError') return; }
     }
 
@@ -1657,7 +1657,7 @@ function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: C.papier, color: C.tinte }}>
       <form onSubmit={anmelden} className="w-full max-w-sm rounded-2xl p-5 shadow-sm" style={{ background: "#fff", border: `1px solid ${C.linie}` }}>
-        <div className="text-xs font-black tracking-widest mb-2" style={{ color: C.rot }}>FIRTINASPOR III.</div>
+        <div className="text-xs font-black tracking-widest mb-2" style={{ color: C.rot }}>HAQQ PRO DEMO</div>
         <h1 className="text-2xl font-black mb-1">Trainer-Login</h1>
         <p className="text-sm mb-5" style={{ color: C.grau }}>Melde dich mit deinem Trainerkonto an. Danach seht ihr beide denselben Live-Datenstand.</p>
         <label className="block text-xs font-bold mb-1">E-Mail</label>
@@ -1710,7 +1710,7 @@ function InstallAppButton() {
     }
     const isiOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
     if (isiOS) {
-      alert("Auf iPhone: unten auf Teilen tippen und dann „Zum Home-Bildschirm“ auswählen. Danach startet Firtinaspor wie eine eigene App.");
+      alert("Auf iPhone: unten auf Teilen tippen und dann „Zum Home-Bildschirm“ auswählen. Danach startet HAQQ Pro wie eine eigene App.");
     } else {
       alert("Öffne das Browser-Menü und wähle „App installieren“ oder „Zum Startbildschirm hinzufügen“.");
     }
@@ -1746,8 +1746,8 @@ function HauptApp({ session }) {
       <div className="app-header px-4 pb-3" style={{ background: C.rot }}>
         <div className="flex items-center justify-between gap-3">
           <div className="text-white">
-            <div className="text-lg font-black leading-none tracking-tight">FIRTINASPOR III.</div>
-            <div className="text-xs opacity-80 mt-1">Kreisliga C2 · Saison 26/27</div>
+            <div className="text-lg font-black leading-none tracking-tight">HAQQ PRO DEMO</div>
+            <div className="text-xs opacity-80 mt-1">Demo-Team · Saison 26/27</div>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-xs text-white text-right" style={{ opacity: status === "speichert" ? 0.9 : 0.65 }}>
