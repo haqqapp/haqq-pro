@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { supabase, supabaseConfigured } from "./supabase.js";
 
 /* ---------------------------------------------------------------- Konstanten */
 const KEY = "firtinaspor3-v1";
@@ -139,7 +138,6 @@ function startDaten() {
   return {
     spieler: KADER_START.map(([name, hp, sperre, verf]) => ({
       name, haupt: hp, neben: [], posStaerke: hp ? { [hp]: 100 } : {}, sperre, verfuegbar: verf, fix: false,
-      dabeiSeit: "2026-07-01", aktivBis: "", aktiv: true,
     })),
     trainings, anwesend,
     spiele: SPIELE_START.map(([nr, datum, zeit, gegner, ha, wb, tf, tg]) => ({
@@ -162,13 +160,6 @@ const fmtDatum = (s) => {
 const fmtNote = (v) => (v == null ? "—" : v.toFixed(2).replace(".", ","));
 const fmtProz = (v) => (v == null ? "—" : Math.round(v * 100) + " %");
 
-function spielerAmDatum(s, datum) {
-  if (s.aktiv === false && !s.aktivBis) return false;
-  if (datum && s.dabeiSeit && datum < s.dabeiSeit) return false;
-  if (datum && s.aktivBis && datum > s.aktivBis) return false;
-  return true;
-}
-
 function normalisiereDaten(raw) {
   const basis = startDaten();
   return {
@@ -178,13 +169,7 @@ function normalisiereDaten(raw) {
     spielPositionen: raw?.spielPositionen || {},
     spielberichte: raw?.spielberichte || {},
     aenderungen: raw?.aenderungen || [],
-    spieler: (raw?.spieler || basis.spieler).map((s) => ({
-      ...s,
-      dabeiSeit: s.dabeiSeit || "2026-07-01",
-      aktivBis: s.aktivBis || "",
-      aktiv: s.aktiv !== false,
-      posStaerke: s.posStaerke || (s.haupt ? { [s.haupt]: 100, ...Object.fromEntries((s.neben || []).map((p) => [p, 70])) } : {}),
-    })),
+    spieler: (raw?.spieler || basis.spieler).map((s) => ({ ...s, posStaerke: s.posStaerke || (s.haupt ? { [s.haupt]: 100, ...Object.fromEntries((s.neben || []).map((p) => [p, 70])) } : {}) })),
     elf: raw?.elf || {},
   };
 }
@@ -203,106 +188,41 @@ function aenderungsText(alt, neu) {
 }
 
 function useDaten(session) {
-  const [daten, setDaten] = useState(null);
-  const [status, setStatus] = useState("laden");
-  const datenRef = React.useRef(null);
+  const STORAGE_KEY = "firtinaspor-v2-offline-test";
+  const [daten, setDaten] = useState(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? normalisiereDaten(JSON.parse(raw)) : normalisiereDaten(startDaten());
+    } catch {
+      return normalisiereDaten(startDaten());
+    }
+  });
+  const [status, setStatus] = useState("bereit");
+  const datenRef = React.useRef(daten);
 
   useEffect(() => { datenRef.current = daten; }, [daten]);
 
-  useEffect(() => {
-    if (!session || !supabase) return;
-    let aktiv = true;
-
-    const laden = async () => {
-      setStatus("laden");
-      const { data, error } = await supabase
-        .from("app_state")
-        .select("data")
-        .eq("id", "main")
-        .maybeSingle();
-
-      if (!aktiv) return;
-      if (error) {
-        console.error(error);
-        setStatus("fehler");
-        return;
-      }
-
-      if (data?.data) {
-        const normal = normalisiereDaten(data.data);
-        setDaten(normal);
-        datenRef.current = normal;
-        setStatus("bereit");
-        return;
-      }
-
-      const initial = normalisiereDaten(startDaten());
-      const { error: insertError } = await supabase
-        .from("app_state")
-        .upsert({ id: "main", data: initial, updated_by: session.user.id });
-
-      if (!aktiv) return;
-      if (insertError) {
-        console.error(insertError);
-        setStatus("fehler");
-      } else {
-        setDaten(initial);
-        datenRef.current = initial;
-        setStatus("bereit");
-      }
-    };
-
-    laden();
-
-    const channel = supabase
-      .channel("firtinaspor-app-state-v4")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "app_state", filter: "id=eq.main" },
-        (payload) => {
-          if (payload.new?.data) {
-            const normal = normalisiereDaten(payload.new.data);
-            setDaten(normal);
-            datenRef.current = normal;
-            setStatus("bereit");
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      aktiv = false;
-      supabase.removeChannel(channel);
-    };
-  }, [session?.user?.id]);
-
-  const speichern = useCallback(async (neu, aktion) => {
-    if (!session || !supabase) return;
+  const speichern = useCallback((neu, aktion) => {
     const alt = datenRef.current;
     const normal = normalisiereDaten(neu);
     const eintrag = {
       id: Date.now() + "-" + Math.random().toString(36).slice(2, 7),
       zeit: new Date().toISOString(),
-      trainer: session?.user?.email || "Trainer",
+      trainer: session?.user?.email || "Offline-Testtrainer",
       aktion: aktion || aenderungsText(alt, normal),
     };
     normal.aenderungen = [eintrag, ...(normal.aenderungen || [])].slice(0, 300);
-
     setDaten(normal);
     datenRef.current = normal;
     setStatus("speichert");
-
-    const { error } = await supabase
-      .from("app_state")
-      .upsert({ id: "main", data: normal, updated_by: session.user.id });
-
-    if (error) {
-      console.error(error);
-      setStatus("fehler");
-    } else {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(normal));
       setStatus("bereit");
+    } catch (e) {
+      console.error(e);
+      setStatus("fehler");
     }
-  }, [session?.user?.id]);
+  }, [session?.user?.email]);
 
   return [daten, speichern, status];
 }
@@ -344,10 +264,7 @@ function formDaten(d, name) {
     (byPos[x.pos] ||= []).push(x.note);
   });
   const positionsform = Object.fromEntries(Object.entries(byPos).map(([p, arr]) => [p, arr.reduce((a,b)=>a+b,0)/arr.length]));
-  const letzte5 = werte.slice(-5);
-  const avg5 = letzte5.length ? letzte5.reduce((a,x)=>a+x.note,0)/letzte5.length : null;
-  const avg3 = letzte3.length ? letzte3.reduce((a,x)=>a+x.note,0)/letzte3.length : null;
-  return { werte, momentum, trend, positionsform, avg5, avg3 };
+  return { werte, momentum, trend, positionsform };
 }
 
 function spielerSpielStats(d, name) {
@@ -370,17 +287,10 @@ function positionsStaerke(w, code) {
 function aufstellungsWert(w, code) {
   const fit = positionsStaerke(w, code) / 100;
   if (fit <= 0) return -Infinity;
-  const basis = Number(w.score || 0);
-  const form5 = w.avg5 == null ? basis / 10 : w.avg5;
-  const momentum = w.momentum == null ? form5 : w.momentum;
-  const spiele = Number(w.einsaetze || 0);
-  // Neue Spieler mit kleiner Datenbasis werden nicht durch 1-2 starke/schwache Spiele überbewertet.
-  const sicherheit = Math.min(1, spiele / 5);
-  const formAnteil = 25 * sicherheit;
-  const momentumAnteil = 10 * sicherheit;
-  const basisAnteil = 45 + (25 - formAnteil) + (10 - momentumAnteil);
-  const wert = basisAnteil * (basis / 100) + formAnteil * (form5 / 10) + 20 * fit + momentumAnteil * (momentum / 10);
-  return wert * 100;
+  const posForm = w?.positionsform?.[code];
+  const bestePosForm = Math.max(0, ...Object.values(w?.positionsform || {}).filter((x) => typeof x === 'number'));
+  const formFaktor = posForm != null && bestePosForm > 0 ? (0.8 + 0.2 * (posForm / bestePosForm)) : 1;
+  return (w.score || 0) * fit * formFaktor;
 }
 
 function rechne(d) {
@@ -391,13 +301,8 @@ function rechne(d) {
   });
   const nTrain = relevanteTrainings.length;
   const werte = d.spieler.map((s) => {
-    const trainingsFuerSpieler = relevanteTrainings.filter((t) => {
-      if (s.dabeiSeit && t.datum < s.dabeiSeit) return false;
-      if (s.aktivBis && t.datum > s.aktivBis) return false;
-      return true;
-    });
-    const dabei = trainingsFuerSpieler.filter((t) => (d.anwesend[t.id] || []).includes(s.name)).length;
-    const quote = trainingsFuerSpieler.length ? dabei / trainingsFuerSpieler.length : null;
+    const dabei = relevanteTrainings.filter((t) => (d.anwesend[t.id] || []).includes(s.name)).length;
+    const quote = nTrain ? dabei / nTrain : null;
     const noten = d.spiele
       .map((sp) => spielNote(d, sp.nr, s.name))
       .filter((v) => typeof v === "number");
@@ -407,13 +312,12 @@ function rechne(d) {
     const score = Math.round(
       ((oNote || 0) * 10 * d.wNote + (quote || 0) * 100 * d.wTraining) * 10
     ) / 10;
-    const datenstatus = noten.length >= 5 ? "voll bewertet" : noten.length ? `provisorisch · ${noten.length} Spiel${noten.length===1?"":"e"}` : "neu · noch ohne Spielnote";
-    return { ...s, trainings: dabei, quote, oNote, einsaetze: noten.length, score, ...form, ...stats, datenstatus };
+    return { ...s, trainings: dabei, quote, oNote, einsaetze: noten.length, score, ...form, ...stats };
   });
 
   // Kaderregel: Im gesamten 16er-Aufgebot wird genau ein Torwart eingeplant.
   // Die restlichen Plätze (inkl. Reserve/16. Mann) gehören Feldspielern.
-  const verfuegbar = werte.filter((w) => w.aktiv !== false && w.verfuegbar && w.sperre === 0 && (!w.aktivBis || w.aktivBis >= heute()));
+  const verfuegbar = werte.filter((w) => w.verfuegbar && w.sperre === 0);
   const torhueter = verfuegbar.filter((w) => w.haupt === "TW").sort((a, b) => b.score - a.score);
   const fixerTW = torhueter.filter((w) => w.fix).sort((a, b) => b.score - a.score)[0];
   const gewaehlterTW = fixerTW || torhueter[0] || null;
@@ -669,7 +573,6 @@ function Training({ d, save }) {
   const [akt, setAkt] = useState((vergangen[0] || sortiert[0] || {}).id);
   const termin = d.trainings.find((t) => t.id === akt);
   const da = (d.anwesend[akt] || []);
-  const terminSpieler = d.spieler.filter((s)=>spielerAmDatum(s, termin?.datum || heute()));
 
   const toggle = (name) => {
     const neu = { ...d.anwesend };
@@ -683,8 +586,7 @@ function Training({ d, save }) {
     const datum = prompt("Datum des Trainings (JJJJ-MM-TT)", heute());
     if (!datum || !/^\d{4}-\d{2}-\d{2}$/.test(datum)) return;
     const id = "t" + (Date.now() % 1000000);
-    const trainings = [...d.trainings, { id, datum }].sort((a,b)=>(a.datum||"").localeCompare(b.datum||""));
-    save({ ...d, trainings, anwesend: { ...d.anwesend, [id]: [] } });
+    save({ ...d, trainings: [...d.trainings, { id, datum }], anwesend: { ...d.anwesend, [id]: [] } });
     setAkt(id);
   };
 
@@ -707,11 +609,11 @@ function Training({ d, save }) {
         ))}
       </div>
       <div className="px-4 pb-2 text-sm" style={{ color: C.grau }}>
-        {da.filter(n=>terminSpieler.some(s=>s.name===n)).length} von {terminSpieler.length} da
+        {da.length} von {d.spieler.length} da
         {termin && termin.datum > heute() && " · Termin liegt noch vor uns"}
       </div>
       <div style={{ borderTop: `1px solid ${C.linie}` }}>
-        {terminSpieler.map((s) => {
+        {d.spieler.map((s) => {
           const an = da.includes(s.name);
           return (
             <Zeile key={s.name} onClick={() => toggle(s.name)}>
@@ -732,7 +634,7 @@ function Training({ d, save }) {
 
 /* ---------------------------------------------------------------- Noten */
 function Noten({ d, save, session }) {
-  const gespielt = [...d.spiele].sort((a, b) => (b.datum || "").localeCompare(a.datum || "") || b.nr - a.nr);
+  const gespielt = [...d.spiele].sort((a, b) => b.nr - a.nr);
   const [nr, setNr] = useState((gespielt.find((s) => s.datum && s.datum <= heute()) || gespielt[0]).nr);
   const spiel = d.spiele.find((s) => s.nr === nr);
   const uid = session?.user?.id || "trainer";
@@ -757,7 +659,16 @@ function Noten({ d, save, session }) {
     save({ ...d, trainerNoten: neuTrainer, noten: neuNoten }, `Bewertung ${name} gegen ${spiel?.gegner || "Gegner"} geändert`);
   };
 
-
+  const setPos = (name, pos) => {
+    const gkey = "g" + nr;
+    save({
+      ...d,
+      spielPositionen: {
+        ...d.spielPositionen,
+        [gkey]: { ...(d.spielPositionen?.[gkey] || {}), [name]: pos || null },
+      },
+    }, `Spielposition von ${name} geändert`);
+  };
 
   return (
     <div className="pb-24">
@@ -784,16 +695,20 @@ function Noten({ d, save, session }) {
         </div>
       )}
       <div style={{ borderTop: `1px solid ${C.linie}` }}>
-        {d.spieler.filter((s)=>spielerAmDatum(s, spiel?.datum || heute())).map((s) => {
+        {d.spieler.map((s) => {
           const entries = trainerEintraege(d, nr, s.name);
           const avg = spielNote(d, nr, s.name);
           const eigener = entries.find((x) => x.id === uid)?.value ?? null;
-          const st = d.spielberichte?.["g" + nr]?.stats?.[s.name] || {};
-          const hinweis = [Number(st.tore||0)>0 ? `⚽ ${st.tore} Tor${Number(st.tore)===1?"":"e"}` : "", Number(st.vorlagen||0)>0 ? `🎯 ${st.vorlagen} Assist${Number(st.vorlagen)===1?"":"s"}` : ""].filter(Boolean).join(" · ");
+          const pos = d.spielPositionen?.["g" + nr]?.[s.name] || "";
           return (
             <div key={s.name} className="px-4 py-3" style={{ borderBottom: `1px solid ${C.linie}` }}>
               <div className="flex items-center gap-2">
-                <div className="flex-1 min-w-0"><div className="font-bold truncate">{s.name}</div>{hinweis && <div className="text-xs font-bold mt-0.5" style={{color:C.rasen}}>{hinweis}</div>}</div>
+                <span className="font-bold flex-1 truncate">{s.name}</span>
+                <select value={pos} onChange={(e) => setPos(s.name, e.target.value)}
+                  className="text-xs rounded-lg px-2 py-1.5" style={{ border: `1px solid ${C.linie}`, background: "#fff" }}>
+                  <option value="">Position</option>
+                  {POS.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
                 <div className="w-16 text-right">
                   <div className="text-xs" style={{ color: C.grau }}>Ø Trainer</div>
                   <div className="font-black tabular-nums" style={{ color: avg >= 8 ? C.gut : avg < 6 ? C.warn : C.tinte }}>{fmtNote(avg)}</div>
@@ -1023,8 +938,7 @@ function Spielplan({ d, save }) {
     const art = (prompt("Wettbewerb", "Freundschaft") || "Freundschaft").trim();
     const ort = (prompt("Heim oder Auswärts? H / A", "H") || "").toUpperCase();
     const nr = Math.max(0, ...d.spiele.map((s) => Number(s.nr) || 0)) + 1;
-    const spiele = [...d.spiele, { nr, datum, zeit, gegner: gegner.trim(), ha: ort === "A" ? "A" : ort === "H" ? "H" : "", wb: art, tf: null, tg: null }].sort((a,b)=>(a.datum||"9999-99-99").localeCompare(b.datum||"9999-99-99") || a.nr-b.nr);
-    save({ ...d, spiele }, `Spiel gegen ${gegner.trim()} angelegt`);
+    save({ ...d, spiele: [...d.spiele, { nr, datum, zeit, gegner: gegner.trim(), ha: ort === "A" ? "A" : ort === "H" ? "H" : "", wb: art, tf: null, tg: null }] }, `Spiel gegen ${gegner.trim()} angelegt`);
     setOffen(nr);
   };
   const setTor = (nr, feld, wert) => {
@@ -1035,8 +949,7 @@ function Spielplan({ d, save }) {
     const s = d.spiele.find((x) => x.nr === nr);
     const datum = prompt("Datum (JJJJ-MM-TT)", s.datum || heute());
     if (datum == null) return;
-    const spiele = d.spiele.map((x) => (x.nr === nr ? { ...x, datum } : x)).sort((a,b)=>(a.datum||"9999-99-99").localeCompare(b.datum||"9999-99-99") || a.nr-b.nr);
-    save({ ...d, spiele });
+    save({ ...d, spiele: d.spiele.map((x) => (x.nr === nr ? { ...x, datum } : x)) });
   };
 
   const gespielt = d.spiele.filter((s) => s.tf != null && s.tg != null);
@@ -1082,7 +995,7 @@ function Spielplan({ d, save }) {
       </div>
 
       <div style={{ borderTop: `1px solid ${C.linie}` }}>
-        {[...d.spiele].sort((a,b)=>(a.datum||"9999-99-99").localeCompare(b.datum||"9999-99-99") || a.nr-b.nr).map((s) => {
+        {d.spiele.map((s) => {
           const hatInhalt = !!(d.spielberichte?.["g" + s.nr]?.kommentar || Object.values(d.spielberichte?.["g" + s.nr]?.stats || {}).some((st) => (st?.tore || 0) > 0 || (st?.vorlagen || 0) > 0));
           return <div key={s.nr} className="px-4 py-3" style={{ borderBottom: `1px solid ${C.linie}` }}>
             <div className="flex items-center gap-3">
@@ -1310,7 +1223,6 @@ function Aufstellung({ d, save, berechnet }) {
       <div className="px-4 pt-5 pb-2">
         <div className="text-sm font-black">Bank-Empfehlung · 4 Spieler</div>
         <div className="text-xs mt-1" style={{color:C.grau}}>Bewusst ausgeglichen: nur Feldspieler – möglichst Defensive, Mittelfeld und Offensive mehrfach abgedeckt.</div>
-        <div className="text-xs mt-1" style={{color:C.grau}}>Automatik berücksichtigt Gesamtscore, letzte 5 Spiele, Positionsstärke und Momentum. Bei weniger als 5 Spielnoten wird die Form vorsichtiger gewichtet.</div>
       </div>
       <div style={{ borderTop: `1px solid ${C.linie}` }}>
         {bank.length === 0 && (
@@ -1437,15 +1349,12 @@ function Spielerprofile({ d, berechnet }) {
           <div className="text-right"><div className="text-xs" style={{color:C.grau}}>Score</div><div className="text-2xl font-black" style={{color:C.rot}}>{w.score.toFixed(1).replace('.',',')}</div></div>
         </div>
         <div className="flex gap-2 flex-wrap mt-4">
-          <span className="text-xs font-bold px-2 py-1 rounded" style={{background:C.rasenHell,color:C.rasen}}>Saison Ø {fmtNote(w.oNote)}</span>
-          <span className="text-xs font-bold px-2 py-1 rounded" style={{background:C.rasenHell,color:C.rasen}}>Letzte 5 Ø {fmtNote(w.avg5)}</span>
-          <span className="text-xs font-bold px-2 py-1 rounded" style={{background:C.rasenHell,color:C.rasen}}>Letzte 3 Ø {fmtNote(w.avg3)}</span>
-          <span className="text-xs font-bold px-2 py-1 rounded" style={{background:'#F0E9E5'}}>Training seit {w.dabeiSeit ? fmtDatum(w.dabeiSeit) : 'Eintritt'} · {fmtProz(w.quote)}</span>
+          <span className="text-xs font-bold px-2 py-1 rounded" style={{background:C.rasenHell,color:C.rasen}}>Ø {fmtNote(w.oNote)}</span>
+          <span className="text-xs font-bold px-2 py-1 rounded" style={{background:'#F0E9E5'}}>Training {fmtProz(w.quote)}</span>
           <span className="text-xs font-bold px-2 py-1 rounded" style={{background:'#FBF0D2',color:'#8A6D1F'}}>Momentum {fmtNote(w.momentum)}</span>
           <span className="text-xs font-bold px-2 py-1 rounded" style={{background:w.trend>.25?C.rasenHell:w.trend<-.25?'#FAE3E0':'#F0E9E5',color:w.trend>.25?C.rasen:w.trend<-.25?C.warn:C.grau}}>Form {w.trend>.25?'↑':w.trend<-.25?'↓':'→'}</span>
           <span className="text-xs font-bold px-2 py-1 rounded" style={{background:'#F0E9E5'}}>⚽ {w.tore || 0}</span>
           <span className="text-xs font-bold px-2 py-1 rounded" style={{background:'#F0E9E5'}}>A {w.assists || 0}</span>
-          <span className="text-xs font-bold px-2 py-1 rounded" style={{background:w.einsaetze>=5?'#E8F4EA':'#FFF3D6',color:w.einsaetze>=5?C.rasen:'#8A6D1F'}}>{w.datenstatus}</span>
         </div>
       </div>
     </div>
@@ -1560,10 +1469,9 @@ function Positionen({ d, save }) {
     const name = prompt("Name des Spielers");
     if (!name || !name.trim()) return;
     if (d.spieler.some((s) => s.name === name.trim())) { alert("Den Namen gibt es schon."); return; }
-    const dabeiSeit = prompt("Dabei seit (JJJJ-MM-TT)", heute()) || heute();
     save({
       ...d,
-      spieler: [...d.spieler, { name: name.trim(), haupt: "", neben: [], posStaerke: {}, sperre: 0, verfuegbar: true, fix: false, dabeiSeit, aktivBis: "", aktiv: true }]
+      spieler: [...d.spieler, { name: name.trim(), haupt: "", neben: [], posStaerke: {}, sperre: 0, verfuegbar: true, fix: false }]
         .sort((a, b) => a.name.localeCompare(b.name, "de")),
     });
   };
@@ -1574,19 +1482,12 @@ function Positionen({ d, save }) {
         <button onClick={neuerSpieler} className="text-sm font-bold px-3 py-1.5 rounded-full"
           style={{ background: C.rot, color: "#fff" }}>+ Spieler</button>} />
       <div className="px-4 pb-3 text-sm" style={{ color: C.grau }}>
-        Eintrittsdatum verhindert eine unfair schlechte Trainingsquote bei Neuzugängen. Positionsstärken fließen direkt in die automatische Aufstellung ein.
+        Hauptposition antippen, weitere Positionen dazu wählen. Beides fließt in die Aufstellung ein.
       </div>
       <div style={{ borderTop: `1px solid ${C.linie}` }}>
         {d.spieler.map((s) => (
           <div key={s.name} className="px-4 py-3" style={{ borderBottom: `1px solid ${C.linie}` }}>
-            <div className="flex items-center gap-2 mb-2">
-              <div className="font-bold flex-1">{s.name}</div>
-              <button onClick={()=>upd(s.name,"aktiv",s.aktiv===false)} className="text-xs font-bold px-2 py-1 rounded" style={{background:s.aktiv===false?'#FAE3E0':C.rasenHell,color:s.aktiv===false?C.warn:C.rasen}}>{s.aktiv===false?'inaktiv':'aktiv'}</button>
-            </div>
-            <div className="grid grid-cols-2 gap-2 mb-3">
-              <label className="text-xs" style={{color:C.grau}}>Dabei seit<input type="date" value={s.dabeiSeit||''} onChange={e=>upd(s.name,"dabeiSeit",e.target.value)} className="mt-1 w-full rounded-lg px-2 py-1.5" style={{border:`1px solid ${C.linie}`,background:'#fff',color:C.tinte}}/></label>
-              <label className="text-xs" style={{color:C.grau}}>Aktiv bis<input type="date" value={s.aktivBis||''} onChange={e=>upd(s.name,"aktivBis",e.target.value)} className="mt-1 w-full rounded-lg px-2 py-1.5" style={{border:`1px solid ${C.linie}`,background:'#fff',color:C.tinte}}/></label>
-            </div>
+            <div className="font-bold mb-2">{s.name}</div>
             <div className="flex flex-wrap gap-1.5">
               {POS.map((p) => {
                 const haupt = s.haupt === p;
@@ -1732,7 +1633,7 @@ function HauptApp({ session }) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: C.papier }}>
         <div className="text-sm" style={{ color: C.grau }}>
-          {status === "laden" ? "Teamdaten werden geladen …" : "Daten konnten nicht geladen werden. Supabase-Einstellungen prüfen."}
+          {status === "laden" ? "Testdaten werden geladen …" : "Testdaten konnten nicht geladen werden."}
         </div>
       </div>
     );
@@ -1751,9 +1652,12 @@ function HauptApp({ session }) {
           </div>
           <div className="flex items-center gap-3">
             <div className="text-xs text-white text-right" style={{ opacity: status === "speichert" ? 0.9 : 0.65 }}>
-              {status === "speichert" ? "speichert …" : status === "fehler" ? "Speicherfehler" : "live synchronisiert"}
+              {status === "speichert" ? "speichert …" : status === "fehler" ? "Speicherfehler" : "lokal gespeichert"}
             </div>
             <InstallAppButton />
+            <button onClick={() => { if (confirm("Offline-Testdaten wirklich zurücksetzen?")) { localStorage.removeItem("firtinaspor-v2-offline-test"); location.reload(); } }} className="text-xs font-bold px-2 py-1 rounded" style={{ background: "rgba(255,255,255,.15)", color: "#fff" }}>
+              Test reset
+            </button>
           </div>
         </div>
       </div>
@@ -1770,41 +1674,18 @@ function HauptApp({ session }) {
       <Inhalt d={d} save={save} berechnet={berechnet} session={session} />
 
       <div className="px-4 py-4 text-xs" style={{ color: C.grau }}>
-        Gemeinsamer Team-Datenstand über Supabase · Änderungen werden live zwischen euren Geräten synchronisiert.
+        OFFLINE-TEST · Daten bleiben nur in diesem Browser und verändern eure Live-App nicht.
       </div>
     </div>
   );
 }
 
 export default function App() {
-  const [session, setSession] = useState(undefined);
-
-  useEffect(() => {
-    if (!supabaseConfigured || !supabase) {
-      setSession(null);
-      return;
-    }
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
-    return () => listener.subscription.unsubscribe();
-  }, []);
-
-  if (!supabaseConfigured) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4" style={{ background: C.papier, color: C.tinte }}>
-        <div className="max-w-md rounded-2xl p-5" style={{ background: "#fff", border: `1px solid ${C.linie}` }}>
-          <h1 className="text-xl font-black mb-2">Supabase noch nicht verbunden</h1>
-          <p className="text-sm" style={{ color: C.grau }}>
-            Trage in Vercel die Variablen VITE_SUPABASE_URL und VITE_SUPABASE_ANON_KEY ein und deploye die App neu.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (session === undefined) {
-    return <div className="min-h-screen flex items-center justify-center" style={{ background: C.papier }}>Lädt …</div>;
-  }
-
-  return session ? <HauptApp session={session} /> : <Login />;
+  const demoSession = {
+    user: {
+      id: "offline-testtrainer",
+      email: "testtrainer@offline.local",
+    },
+  };
+  return <HauptApp session={demoSession} />;
 }
