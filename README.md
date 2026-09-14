@@ -1,14 +1,12 @@
-# HAQQ Pro
+# HAQQ Pro Demo V2
 
-Komplett neue, neutrale Kunden-App. Keine Firtinaspor-Daten und keine Verbindung zur bestehenden Firtinaspor-Supabase-Instanz.
+Neutrale Kunden-Demo auf Basis der bestehenden Trainer-App.
 
-## Aktueller Stand
-- Team-Ersteinrichtung
-- Spieler + Positionen
-- Training + Anwesenheit
-- Spiele + Ergebnisse
-- flexibler Spieltagskader 11–18 Spieler
-- lokale Speicherung im Browser
+- anonymisierte Spielernamen
+- anonymisierte Vereins-/Gegnernamen
+- Trainings- und Bewertungsdaten als Demo übernommen
+- flexibler Spieltagskader 11–18
+- komplett getrennt von der privaten Trainer-App und deren Datenbank
+- Daten werden lokal im Browser gespeichert
 
-## Nächste Stufe
-Eigener Supabase-Backend-Aufbau für Registrierung, Vereine, mehrere Teams, Trainer/Co-Trainer, Live-Synchronisierung und Testphase.
+Die spätere Kundenfassung erhält eigene Anmeldung, Teams und Supabase-Mandantentrennung.
