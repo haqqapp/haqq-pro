@@ -1,0 +1,7 @@
+FIRTINASPOR V2 - TESTVERSION
+
+- Kein Supabase-Zugriff
+- Keine Live-Daten werden verändert
+- Änderungen werden nur im Browser-localStorage gespeichert
+- "Test reset" oben setzt die Testdaten zurück
+- Für den bequemsten Handy-Test kann diese ZIP als separates Vercel-Projekt deployed werden.
