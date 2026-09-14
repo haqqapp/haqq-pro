@@ -1,1 +1,9 @@
-
+{
+  "name": "HAQQ Pro",
+  "short_name": "HAQQ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fbf8f6",
+  "theme_color": "#8f1830",
+  "icons": []
+}
