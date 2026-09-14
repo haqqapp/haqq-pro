@@ -1740,6 +1740,14 @@ function HauptApp({ session }) {
 
   const Inhalt = TABS[tab][1];
 
+  const abmelden = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error(error);
+      alert("Abmelden fehlgeschlagen. Bitte erneut versuchen.");
+    }
+  };
+
   return (
     <div className="min-h-screen" style={{ background: C.papier, color: C.tinte,
       fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}>
@@ -1754,6 +1762,13 @@ function HauptApp({ session }) {
               {status === "speichert" ? "speichert …" : status === "fehler" ? "Speicherfehler" : "live synchronisiert"}
             </div>
             <InstallAppButton />
+            <button
+              onClick={abmelden}
+              className="text-xs font-bold px-2 py-1 rounded"
+              style={{ background: "rgba(255,255,255,.14)", color: "#fff", border: "1px solid rgba(255,255,255,.28)" }}
+            >
+              Logout
+            </button>
           </div>
         </div>
       </div>
