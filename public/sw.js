@@ -1,4 +1,4 @@
-const CACHE = 'haqq-pro-demo-v2';
+const CACHE = 'firtinaspor-pwa-v2';
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (event) => {
@@ -17,7 +17,7 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return;
+  if (url.origin !== self.location.origin) return; // Supabase bleibt immer live aus dem Netz.
 
   if (req.mode === 'navigate') {
     event.respondWith(
