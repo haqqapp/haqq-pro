@@ -1640,35 +1640,150 @@ const TABS = [
 ];
 
 function Login() {
+  const [modus, setModus] = useState("login");
   const [email, setEmail] = useState("");
   const [passwort, setPasswort] = useState("");
   const [meldung, setMeldung] = useState("");
+  const [erfolg, setErfolg] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const anmelden = async (e) => {
+  const wechsel = (neu) => {
+    setModus(neu);
+    setMeldung("");
+    setErfolg(false);
+    setPasswort("");
+  };
+
+  const senden = async (e) => {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
     setMeldung("");
-    const { error } = await supabase.auth.signInWithPassword({ email, password: passwort });
-    if (error) setMeldung("Anmeldung fehlgeschlagen. E-Mail oder Passwort prüfen.");
+    setErfolg(false);
+
+    try {
+      if (modus === "login") {
+        const { error } = await supabase.auth.signInWithPassword({ email, password: passwort });
+        if (error) throw error;
+        return;
+      }
+
+      if (modus === "registrieren") {
+        if (passwort.length < 8) {
+          setMeldung("Bitte mindestens 8 Zeichen für das Passwort verwenden.");
+          return;
+        }
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password: passwort,
+          options: { emailRedirectTo: window.location.origin },
+        });
+        if (error) throw error;
+        if (data.session) {
+          setErfolg(true);
+          setMeldung("Konto erstellt. Du wirst angemeldet …");
+        } else {
+          setErfolg(true);
+          setMeldung("Konto erstellt. Bitte bestätige jetzt die E-Mail, die Supabase dir geschickt hat.");
+        }
+        return;
+      }
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      });
+      if (error) throw error;
+      setErfolg(true);
+      setMeldung("E-Mail zum Zurücksetzen wurde gesendet. Bitte öffne den Link in der E-Mail.");
+    } catch (error) {
+      console.error(error);
+      if (modus === "login") setMeldung("Anmeldung fehlgeschlagen. E-Mail oder Passwort prüfen.");
+      else if (modus === "registrieren") setMeldung(error?.message || "Registrierung fehlgeschlagen. Bitte erneut versuchen.");
+      else setMeldung(error?.message || "Zurücksetzen fehlgeschlagen. Bitte erneut versuchen.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const titel = modus === "login" ? "Trainer-Login" : modus === "registrieren" ? "Konto erstellen" : "Passwort vergessen";
+  const beschreibung = modus === "login"
+    ? "Melde dich mit deinem Trainerkonto an. Danach siehst du den gemeinsamen Team-Datenstand."
+    : modus === "registrieren"
+      ? "Erstelle dein HAQQ-Pro-Trainerkonto. Je nach Supabase-Einstellung bestätigst du danach einmal deine E-Mail."
+      : "Gib deine E-Mail ein. Du erhältst einen Link, mit dem du ein neues Passwort setzen kannst.";
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: C.papier, color: C.tinte }}>
+      <form onSubmit={senden} className="w-full max-w-sm rounded-2xl p-5 shadow-sm" style={{ background: "#fff", border: `1px solid ${C.linie}` }}>
+        <div className="text-xs font-black tracking-widest mb-2" style={{ color: C.rot }}>HAQQ PRO</div>
+        <h1 className="text-2xl font-black mb-1">{titel}</h1>
+        <p className="text-sm mb-5" style={{ color: C.grau }}>{beschreibung}</p>
+
+        <label className="block text-xs font-bold mb-1">E-Mail</label>
+        <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required autoComplete="email"
+          className="w-full rounded-lg px-3 py-2 mb-3" style={{ border: `1px solid ${C.linie}`, background: C.papier }} />
+
+        {modus !== "reset" && <>
+          <label className="block text-xs font-bold mb-1">Passwort</label>
+          <input value={passwort} onChange={(e) => setPasswort(e.target.value)} type="password" required minLength={modus === "registrieren" ? 8 : undefined}
+            autoComplete={modus === "login" ? "current-password" : "new-password"}
+            className="w-full rounded-lg px-3 py-2 mb-3" style={{ border: `1px solid ${C.linie}`, background: C.papier }} />
+          {modus === "registrieren" && <div className="text-xs -mt-1 mb-3" style={{ color: C.grau }}>Mindestens 8 Zeichen.</div>}
+        </>}
+
+        {meldung && <div className="text-sm mb-3 rounded-lg px-3 py-2" style={{ color: erfolg ? C.gut : C.warn, background: erfolg ? C.rasenHell : "#FAE3E0" }}>{meldung}</div>}
+
+        <button disabled={busy} className="w-full py-2.5 rounded-lg font-black text-white" style={{ background: C.rot, opacity: busy ? .6 : 1 }}>
+          {busy ? "Bitte warten …" : modus === "login" ? "Anmelden" : modus === "registrieren" ? "Kostenlos registrieren" : "Reset-Link senden"}
+        </button>
+
+        <div className="mt-4 flex flex-col gap-2 text-center text-sm font-bold">
+          {modus === "login" ? <>
+            <button type="button" onClick={() => wechsel("reset")} style={{ color: C.grau }}>Passwort vergessen?</button>
+            <button type="button" onClick={() => wechsel("registrieren")} style={{ color: C.rot }}>Noch kein Konto? Registrieren</button>
+          </> : (
+            <button type="button" onClick={() => wechsel("login")} style={{ color: C.rot }}>Zurück zur Anmeldung</button>
+          )}
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function NeuesPasswort({ onFertig }) {
+  const [passwort, setPasswort] = useState("");
+  const [wiederholen, setWiederholen] = useState("");
+  const [meldung, setMeldung] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const speichern = async (e) => {
+    e.preventDefault();
+    setMeldung("");
+    if (passwort.length < 8) return setMeldung("Bitte mindestens 8 Zeichen verwenden.");
+    if (passwort !== wiederholen) return setMeldung("Die beiden Passwörter stimmen nicht überein.");
+    setBusy(true);
+    const { error } = await supabase.auth.updateUser({ password: passwort });
     setBusy(false);
+    if (error) return setMeldung(error.message || "Passwort konnte nicht geändert werden.");
+    alert("Dein Passwort wurde geändert.");
+    onFertig();
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: C.papier, color: C.tinte }}>
-      <form onSubmit={anmelden} className="w-full max-w-sm rounded-2xl p-5 shadow-sm" style={{ background: "#fff", border: `1px solid ${C.linie}` }}>
-        <div className="text-xs font-black tracking-widest mb-2" style={{ color: C.rot }}>HAQQ PRO DEMO</div>
-        <h1 className="text-2xl font-black mb-1">Trainer-Login</h1>
-        <p className="text-sm mb-5" style={{ color: C.grau }}>Melde dich mit deinem Trainerkonto an. Danach seht ihr beide denselben Live-Datenstand.</p>
-        <label className="block text-xs font-bold mb-1">E-Mail</label>
-        <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required autoComplete="email"
+      <form onSubmit={speichern} className="w-full max-w-sm rounded-2xl p-5 shadow-sm" style={{ background: "#fff", border: `1px solid ${C.linie}` }}>
+        <div className="text-xs font-black tracking-widest mb-2" style={{ color: C.rot }}>HAQQ PRO</div>
+        <h1 className="text-2xl font-black mb-1">Neues Passwort</h1>
+        <p className="text-sm mb-5" style={{ color: C.grau }}>Lege jetzt dein neues Passwort fest.</p>
+        <label className="block text-xs font-bold mb-1">Neues Passwort</label>
+        <input value={passwort} onChange={(e) => setPasswort(e.target.value)} type="password" required minLength={8} autoComplete="new-password"
           className="w-full rounded-lg px-3 py-2 mb-3" style={{ border: `1px solid ${C.linie}`, background: C.papier }} />
-        <label className="block text-xs font-bold mb-1">Passwort</label>
-        <input value={passwort} onChange={(e) => setPasswort(e.target.value)} type="password" required autoComplete="current-password"
+        <label className="block text-xs font-bold mb-1">Passwort wiederholen</label>
+        <input value={wiederholen} onChange={(e) => setWiederholen(e.target.value)} type="password" required minLength={8} autoComplete="new-password"
           className="w-full rounded-lg px-3 py-2 mb-3" style={{ border: `1px solid ${C.linie}`, background: C.papier }} />
         {meldung && <div className="text-sm mb-3" style={{ color: C.warn }}>{meldung}</div>}
         <button disabled={busy} className="w-full py-2.5 rounded-lg font-black text-white" style={{ background: C.rot, opacity: busy ? .6 : 1 }}>
-          {busy ? "Anmeldung …" : "Anmelden"}
+          {busy ? "Speichert …" : "Passwort speichern"}
         </button>
       </form>
     </div>
@@ -1793,6 +1908,7 @@ function HauptApp({ session }) {
 
 export default function App() {
   const [session, setSession] = useState(undefined);
+  const [passwortReset, setPasswortReset] = useState(false);
 
   useEffect(() => {
     if (!supabaseConfigured || !supabase) {
@@ -1800,7 +1916,10 @@ export default function App() {
       return;
     }
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setSession(nextSession);
+      if (event === "PASSWORD_RECOVERY") setPasswortReset(true);
+    });
     return () => listener.subscription.unsubscribe();
   }, []);
 
@@ -1820,6 +1939,8 @@ export default function App() {
   if (session === undefined) {
     return <div className="min-h-screen flex items-center justify-center" style={{ background: C.papier }}>Lädt …</div>;
   }
+
+  if (passwortReset) return <NeuesPasswort onFertig={() => setPasswortReset(false)} />;
 
   return session ? <HauptApp session={session} /> : <Login />;
 }
