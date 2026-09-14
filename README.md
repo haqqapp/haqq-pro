@@ -1,12 +1,16 @@
-# HAQQ Pro Demo V2
+# HAQQ Pro Demo V3
 
-Neutrale Kunden-Demo auf Basis der bestehenden Trainer-App.
+Diese Demo basiert auf der bestehenden Trainer-App und verwendet deren Datenstruktur und Beispielwerte.
+Spieler-, Vereins- und Gegnernamen wurden anonymisiert/ersetzt.
 
-- anonymisierte Spielernamen
-- anonymisierte Vereins-/Gegnernamen
-- Trainings- und Bewertungsdaten als Demo übernommen
-- flexibler Spieltagskader 11–18
-- komplett getrennt von der privaten Trainer-App und deren Datenbank
-- Daten werden lokal im Browser gespeichert
+- vollständige Trainingsdaten
+- Spielbewertungen
+- Spielerprofile
+- Spielplan
+- Kaderplanung
+- Aufstellung
+- Verlauf/Export
+- Demo-Login + Abmelden
+- lokale Speicherung im Browser
 
-Die spätere Kundenfassung erhält eigene Anmeldung, Teams und Supabase-Mandantentrennung.
+Die private Firtinaspor-App und deren Supabase-Projekt werden nicht verwendet.
