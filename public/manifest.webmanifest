@@ -1,9 +1,13 @@
 {
-  "name": "HAQQ Pro",
-  "short_name": "HAQQ",
+  "name": "HAQQ Pro – Trainer App",
+  "short_name": "HAQQ Pro",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#fbf8f6",
-  "theme_color": "#8f1830",
-  "icons": []
+  "background_color": "#FBF8F6",
+  "theme_color": "#8f1425",
+  "icons": [
+    {"src":"/icons/icon-192.png","sizes":"192x192","type":"image/png"},
+    {"src":"/icons/icon-512.png","sizes":"512x512","type":"image/png"},
+    {"src":"/icons/icon-maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"}
+  ]
 }
