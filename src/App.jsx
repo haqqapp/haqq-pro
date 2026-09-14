@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 
 /* ---------------------------------------------------------------- Konstanten */
-const KEY = "haqq-pro-demo-v2";
+const KEY = "haqq-pro-demo-v3";
 const POS = ["TW", "IV", "LV", "RV", "DM", "ZM", "OM", "LM", "RM", "MS"];
 const POS_LANG = {
   TW: "Torwart", IV: "Innenverteidiger", LV: "Linksverteidiger", RV: "Rechtsverteidiger",
@@ -57,68 +57,68 @@ const REIHEN = {
 
 /* ---------------------------------------------------------------- Startdaten */
 const T_DATEN = {
-  Adem K.: [14, 15], Arda Y.: [1, 3, 5, 6, 7, 9, 10, 14, 15], Baran T.: [],
-  Can M.: [1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13, 14], Deniz A.: [1, 2, 4, 6, 7, 8, 9, 10, 12],
-  Emir S.: [1, 3, 12, 13, 14], Eren D.: [1, 8, 9, 11], Felix R.: [1, 2, 4, 6, 10, 12],
-  Hakan B.: [1, 10, 11], Jan P.: [1], Kerem C.: [2, 4, 10, 12], Lamin J.: [],
-  Leon H.: [1, 9], Mert K.: [4, 6, 8, 9, 10, 11, 12], Mika E.: [15], Murat A.: [9],
-  Noah F.: [], Ozan G.: [4, 5, 8, 9, 10, 11, 12, 13, 14, 15], Rami N.: [1, 2], Samir K.: [7, 10],
-  Sinan Ö.: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15],
-  Tarek B.: [1, 2, 6, 7, 8, 9, 10, 11, 12, 13, 14], Tom W.: [],
-  Umut D.: [1, 5, 10, 11, 14], Yannik S.: [1, 7, 8, 9, 10, 12, 15],
-  Yasin M.: [1, 2, 3, 4, 6, 7, 12, 13, 14, 15], Yusuf A.: [1, 2], Zeki K.: [14, 15],
+  Adem: [14, 15], Arda: [1, 3, 5, 6, 7, 9, 10, 14, 15], Baran: [],
+  Can: [1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13, 14], Deniz: [1, 2, 4, 6, 7, 8, 9, 10, 12],
+  Emir: [1, 3, 12, 13, 14], Eren: [1, 8, 9, 11], Felix: [1, 2, 4, 6, 10, 12],
+  Furkan: [1, 10, 11], Hakan: [1], Kerem: [2, 4, 10, 12], Malik: [],
+  Marco: [1, 9], Mats: [4, 6, 8, 9, 10, 11, 12], Mert: [15], Miran: [9],
+  Nico: [], Onur: [4, 5, 8, 9, 10, 11, 12, 13, 14, 15], Rayan: [1, 2], Sami: [7, 10],
+  Sinan: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15],
+  Serkan: [1, 2, 6, 7, 8, 9, 10, 11, 12, 13, 14], Timo: [],
+  Turan: [1, 5, 10, 11, 14], Tom: [1, 7, 8, 9, 10, 12, 15],
+  Taylan: [1, 2, 3, 4, 6, 7, 12, 13, 14, 15], Umut: [1, 2], Yunus: [14, 15],
 };
 const T_TERMINE = ["2026-07-07","2026-07-09","2026-07-14","2026-07-21","2026-07-23",
   "2026-08-04","2026-08-11","2026-08-18","2026-08-20","2026-08-25","2026-08-27",
   "2026-09-01","2026-09-03","2026-09-08","2026-09-10","2026-09-15"];
 
 const N_DATEN = {
-  Arda Y.: { 1: 7.5, 2: 8, 3: 8, 4: 6, 5: 8.25 }, Baran T.: { 6: 7.5 },
-  Can M.: { 1: 6.5, 2: 7.25, 3: 8, 4: 8, 5: 8, 7: 6.5 },
-  Deniz A.: { 1: 7.5, 2: 7.25, 3: 8.5, 4: 8, 5: 7.5, 6: 8 },
-  Emir S.: { 1: 7, 2: 6, 6: 7, 7: 7 }, Eren D.: { 1: 7.5, 2: 6.25, 5: 7.75, 6: 8, 7: 9 },
-  Felix R.: { 1: 4, 2: 5.5, 4: 5, 5: 4.5 }, Hakan B.: { 6: 9, 7: 8 }, Jan P.: { 4: 6 },
-  Kerem C.: { 1: 7, 2: 6.25, 3: 6, 5: 6.75, 6: 8 }, Lamin J.: { 1: 7, 2: 7.75, 3: 8, 4: 8.5 },
-  Leon H.: { 3: 8, 4: 6, 5: 8, 6: 8, 7: 8 }, Mert K.: { 1: 6.5, 2: 7.25, 3: 7.5, 4: 6, 5: 7.25, 6: 7.5 },
-  Ozan G.: { 3: 6.5, 6: 6.5, 7: 6 }, Rami N.: { 1: 8, 2: 6, 7: 7.5 }, Samir K.: { 2: 8.5, 5: 8, 6: 9 },
-  Sinan Ö.: { 2: 7.25, 5: 7.5, 6: 8.5, 7: 7.5 }, Tarek B.: { 3: 7.5, 4: 8.5, 5: 7.75, 6: 9, 7: 8 },
-  Tom W.: { 5: 9, 6: 10, 7: 8 }, Umut D.: { 1: 6, 2: 6.5, 3: 7, 4: 6, 6: 7, 7: 6 },
-  Yannik S.: { 4: 6.5, 5: 6, 6: 8, 7: 8 }, Yasin M.: { 1: 7.5, 2: 7.25, 4: 7.5, 6: 7, 7: 7 },
-  Yusuf A.: { 1: 7.5, 5: 8, 7: 8 },
+  Arda: { 1: 7.5, 2: 8, 3: 8, 4: 6, 5: 8.25 }, Baran: { 6: 7.5 },
+  Can: { 1: 6.5, 2: 7.25, 3: 8, 4: 8, 5: 8, 7: 6.5 },
+  Deniz: { 1: 7.5, 2: 7.25, 3: 8.5, 4: 8, 5: 7.5, 6: 8 },
+  Emir: { 1: 7, 2: 6, 6: 7, 7: 7 }, Eren: { 1: 7.5, 2: 6.25, 5: 7.75, 6: 8, 7: 9 },
+  Felix: { 1: 4, 2: 5.5, 4: 5, 5: 4.5 }, Furkan: { 6: 9, 7: 8 }, Hakan: { 4: 6 },
+  Kerem: { 1: 7, 2: 6.25, 3: 6, 5: 6.75, 6: 8 }, Malik: { 1: 7, 2: 7.75, 3: 8, 4: 8.5 },
+  Marco: { 3: 8, 4: 6, 5: 8, 6: 8, 7: 8 }, Mats: { 1: 6.5, 2: 7.25, 3: 7.5, 4: 6, 5: 7.25, 6: 7.5 },
+  Onur: { 3: 6.5, 6: 6.5, 7: 6 }, Rayan: { 1: 8, 2: 6, 7: 7.5 }, Sami: { 2: 8.5, 5: 8, 6: 9 },
+  Sinan: { 2: 7.25, 5: 7.5, 6: 8.5, 7: 7.5 }, Serkan: { 3: 7.5, 4: 8.5, 5: 7.75, 6: 9, 7: 8 },
+  Timo: { 5: 9, 6: 10, 7: 8 }, Turan: { 1: 6, 2: 6.5, 3: 7, 4: 6, 6: 7, 7: 6 },
+  Tom: { 4: 6.5, 5: 6, 6: 8, 7: 8 }, Taylan: { 1: 7.5, 2: 7.25, 4: 7.5, 6: 7, 7: 7 },
+  Umut: { 1: 7.5, 5: 8, 7: 8 },
 };
 
 const KADER_START = [
-  ["Adem K.", "TW", 0, false], ["Arda Y.", "TW", 0, true], ["Baran T.", "ZM", 0, false],
-  ["Can M.", "LV", 0, false], ["Deniz A.", "RV", 0, true], ["Emir S.", "IV", 0, true],
-  ["Eren D.", "MS", 0, true], ["Felix R.", "RM", 0, false], ["Hakan B.", "LV", 0, true],
-  ["Jan P.", "MS", 0, false], ["Kerem C.", "IV", 0, true], ["Lamin J.", "LM", 5, false],
-  ["Leon H.", "LV", 0, true], ["Mert K.", "ZM", 0, true], ["Mika E.", "DM", 8, false],
-  ["Murat A.", "IV", 0, false], ["Noah F.", "TW", 0, false], ["Ozan G.", "RM", 0, true],
-  ["Rami N.", "IV", 0, true], ["Samir K.", "DM", 0, true], ["Sinan Ö.", "OM", 0, true],
-  ["Tarek B.", "ZM", 0, true], ["Tom W.", "LM", 0, true], ["Umut D.", "DM", 0, true],
-  ["Yannik S.", "RV", 0, true], ["Yasin M.", "ZM", 0, true], ["Yusuf A.", "MS", 0, false],
-  ["Zeki K.", "IV", 0, true],
+  ["Adem", "TW", 0, false], ["Arda", "TW", 0, true], ["Baran", "ZM", 0, false],
+  ["Can", "LV", 0, false], ["Deniz", "RV", 0, true], ["Emir", "IV", 0, true],
+  ["Eren", "MS", 0, true], ["Felix", "RM", 0, false], ["Furkan", "LV", 0, true],
+  ["Hakan", "MS", 0, false], ["Kerem", "IV", 0, true], ["Malik", "LM", 5, false],
+  ["Marco", "LV", 0, true], ["Mats", "ZM", 0, true], ["Mert", "DM", 8, false],
+  ["Miran", "IV", 0, false], ["Nico", "TW", 0, false], ["Onur", "RM", 0, true],
+  ["Rayan", "IV", 0, true], ["Sami", "DM", 0, true], ["Sinan", "OM", 0, true],
+  ["Serkan", "ZM", 0, true], ["Timo", "LM", 0, true], ["Turan", "DM", 0, true],
+  ["Tom", "RV", 0, true], ["Taylan", "ZM", 0, true], ["Umut", "MS", 0, false],
+  ["Yunus", "IV", 0, true],
 ];
 
 const SPIELE_START = [
-  [1, "2026-07-12", "11:00", "FC Nordpark II", "", "Freundschaft", null, null],
-  [2, "2026-07-19", "13:00", "SV Grünfeld II", "", "Freundschaft", null, null],
-  [3, "2026-07-26", "13:00", "VfL Hafenstadt", "", "Freundschaft", null, null],
-  [4, "2026-08-02", "17:00", "SC Adlerhöhe", "", "Freundschaft", null, null],
-  [5, "2026-08-23", "15:00", "TSV Westend", "A", "Kreisliga C", 5, 4],
-  [6, "2026-08-30", "17:00", "FC Anadolu II", "H", "Kreisliga C", 8, 1],
-  [7, "2026-09-06", "11:00", "SV Viktoria Süd II", "A", "Kreisliga C", 6, 3],
-  [8, "", "", "TuS Sonnenberg", "", "Freundschaft", null, null],
-  [9, "2026-09-27", "17:00", "VfB Eichenfeld III", "H", "Kreisliga C", null, null],
-  [10, "2026-10-04", "13:00", "SpVgg. Blau-Weiß III", "A", "Kreisliga C", null, null],
-  [11, "2026-10-11", "13:00", "ESV Stadtmitte III", "H", "Kreisliga C", null, null],
+  [1, "2026-07-12", "11:00", "FC Adlerstadt II", "", "Freundschaft", null, null],
+  [2, "2026-07-19", "13:00", "SV Nordpark II", "", "Freundschaft", null, null],
+  [3, "2026-07-26", "13:00", "TuS Hafenstadt", "", "Freundschaft", null, null],
+  [4, "2026-08-02", "17:00", "SC Grün-Weiß", "", "Freundschaft", null, null],
+  [5, "2026-08-23", "15:00", "VfL Westend", "A", "Kreisliga C", 5, 4],
+  [6, "2026-08-30", "17:00", "FC Rot-Weiß Süd II", "H", "Kreisliga C", 8, 1],
+  [7, "2026-09-06", "11:00", "SV Eintracht Mitte II", "A", "Kreisliga C", 6, 3],
+  [8, "", "", "TSV Sonnenfeld", "", "Freundschaft", null, null],
+  [9, "2026-09-27", "17:00", "VfB Stadtpark III", "H", "Kreisliga C", null, null],
+  [10, "2026-10-04", "13:00", "SpVgg. Blau-Gelb III", "A", "Kreisliga C", null, null],
+  [11, "2026-10-11", "13:00", "ESV Weststadt III", "H", "Kreisliga C", null, null],
   [12, "2026-10-18", "13:00", "RSV Nord II", "A", "Kreisliga C", null, null],
-  [13, "2026-10-25", "19:00", "Arminia West II", "H", "Kreisliga C", null, null],
-  [14, "2026-11-08", "15:00", "DJK Eintracht II", "A", "Kreisliga C", null, null],
+  [13, "2026-10-25", "19:00", "Arminia Süd II", "H", "Kreisliga C", null, null],
+  [14, "2026-11-08", "15:00", "DJK West 88 II", "A", "Kreisliga C", null, null],
   [15, "2026-11-15", "17:00", "ASC Fortuna III", "A", "Kreisliga C", null, null],
-  [16, "2026-11-29", "17:00", "Eintracht Süd III", "H", "Kreisliga C", null, null],
-  [17, "2026-12-06", "17:00", "SC Rot-Weiß", "H", "Kreisliga C", null, null],
-  [18, "2026-12-13", "13:00", "Blau-Weiß Ost II", "A", "Kreisliga C", null, null],
+  [16, "2026-11-29", "17:00", "Eintracht Heide III", "H", "Kreisliga C", null, null],
+  [17, "2026-12-06", "17:00", "Spiel-Club West", "H", "Kreisliga C", null, null],
+  [18, "2026-12-13", "13:00", "Blau-Weiß Park II", "A", "Kreisliga C", null, null],
 ];
 
 function startDaten() {
@@ -145,7 +145,7 @@ function startDaten() {
       nr, datum, zeit, gegner, ha, wb, tf, tg,
     })),
     noten,
-    wNote: 0.7, wTraining: 0.3, kaderGroesse: 18, reserve: 1,
+    wNote: 0.7, wTraining: 0.3, kaderGroesse: 15, reserve: 1,
     formation: "4-2-3-1", elf: {},
     trainerNoten: {}, spielPositionen: {}, spielberichte: {}, aenderungen: [],
   };
@@ -201,7 +201,7 @@ function aenderungsText(alt, neu) {
   return "Daten geändert";
 }
 
-function useDaten() {
+function useDaten(session) {
   const [daten, setDaten] = useState(() => {
     try {
       const raw = localStorage.getItem(KEY);
@@ -211,31 +211,21 @@ function useDaten() {
     }
   });
   const [status, setStatus] = useState("bereit");
-  const datenRef = React.useRef(daten);
-
-  useEffect(() => { datenRef.current = daten; }, [daten]);
 
   const speichern = useCallback((neu, aktion) => {
-    const alt = datenRef.current;
     const normal = normalisiereDaten(neu);
     const eintrag = {
       id: Date.now() + "-" + Math.random().toString(36).slice(2, 7),
       zeit: new Date().toISOString(),
-      trainer: "HAQQ Demo",
-      aktion: aktion || aenderungsText(alt, normal),
+      trainer: session?.user?.email || "Demo-Trainer",
+      aktion: aktion || "Daten geändert",
     };
     normal.aenderungen = [eintrag, ...(normal.aenderungen || [])].slice(0, 300);
     setStatus("speichert");
     setDaten(normal);
-    datenRef.current = normal;
-    try {
-      localStorage.setItem(KEY, JSON.stringify(normal));
-      setTimeout(() => setStatus("bereit"), 180);
-    } catch (e) {
-      console.error(e);
-      setStatus("fehler");
-    }
-  }, []);
+    localStorage.setItem(KEY, JSON.stringify(normal));
+    setTimeout(() => setStatus("bereit"), 250);
+  }, [session?.user?.email]);
 
   return [daten, speichern, status];
 }
@@ -345,33 +335,29 @@ function rechne(d) {
     return { ...s, trainings: dabei, quote, oNote, einsaetze: noten.length, score, ...form, ...stats, datenstatus };
   });
 
-  // Flexible HAQQ-Pro-Kaderlogik: bis zu 18 Spieler, mindestens ein Torwart wenn verfügbar.
-  // Weitere Torhüter dürfen ebenfalls in den Kader, wenn sie fix gesetzt oder leistungsstark sind.
+  // Kaderregel: Im gesamten 16er-Aufgebot wird genau ein Torwart eingeplant.
+  // Die restlichen Plätze (inkl. Reserve/16. Mann) gehören Feldspielern.
   const verfuegbar = werte.filter((w) => w.aktiv !== false && w.verfuegbar && w.sperre === 0 && (!w.aktivBis || w.aktivBis >= heute()));
-  const zielGroesse = Math.max(11, Math.min(18, Number(d.kaderGroesse) || 18));
-  const fixe = verfuegbar.filter((w) => w.fix).sort((a, b) => b.score - a.score);
-  const ausgewaehlt = [];
-  fixe.slice(0, zielGroesse).forEach((w) => ausgewaehlt.push(w));
+  const torhueter = verfuegbar.filter((w) => w.haupt === "TW").sort((a, b) => b.score - a.score);
+  const fixerTW = torhueter.filter((w) => w.fix).sort((a, b) => b.score - a.score)[0];
+  const gewaehlterTW = fixerTW || torhueter[0] || null;
 
-  const hatTW = ausgewaehlt.some((w) => w.haupt === "TW");
-  if (!hatTW) {
-    const besterTW = verfuegbar.filter((w) => w.haupt === "TW").sort((a, b) => b.score - a.score)[0];
-    if (besterTW && !ausgewaehlt.some((w) => w.name === besterTW.name)) ausgewaehlt.push(besterTW);
-  }
-
-  verfuegbar
-    .filter((w) => !ausgewaehlt.some((x) => x.name === w.name))
-    .sort((a, b) => b.score - a.score)
-    .forEach((w) => { if (ausgewaehlt.length < zielGroesse) ausgewaehlt.push(w); });
+  const feldspieler = verfuegbar.filter((w) => w.haupt !== "TW");
+  const fixeFeld = feldspieler.filter((w) => w.fix).sort((a, b) => b.score - a.score);
+  const feldPlaetze = Math.max(0, d.kaderGroesse - (gewaehlterTW ? 1 : 0));
+  const fixeImKader = fixeFeld.slice(0, feldPlaetze);
+  const freieFeldPlaetze = Math.max(0, feldPlaetze - fixeImKader.length);
+  const kandidaten = feldspieler
+    .filter((w) => !fixeImKader.some((f) => f.name === w.name))
+    .sort((a, b) => b.score - a.score);
 
   const kader = {};
-  ausgewaehlt.forEach((w) => (kader[w.name] = w.fix ? "fix" : "dabei"));
-  verfuegbar
-    .filter((w) => !ausgewaehlt.some((x) => x.name === w.name))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, Math.max(0, Number(d.reserve) || 0))
-    .forEach((w) => (kader[w.name] = "reserve"));
-
+  if (gewaehlterTW) kader[gewaehlterTW.name] = gewaehlterTW.fix ? "fix" : "dabei";
+  fixeImKader.forEach((w) => (kader[w.name] = "fix"));
+  kandidaten.forEach((w, i) => {
+    if (i < freieFeldPlaetze) kader[w.name] = "dabei";
+    else if (i < freieFeldPlaetze + d.reserve) kader[w.name] = "reserve";
+  });
   werte.forEach((w) => {
     w.kader = w.sperre > 0 ? "gesperrt" : kader[w.name] || null;
     w.imKader = w.kader === "dabei" || w.kader === "fix";
@@ -464,7 +450,7 @@ function positionsGruppe(code) {
   if (code === "TW") return "TW";
   if (["RV", "IV", "LV"].includes(code)) return "DEF";
   if (["DM", "ZM", "RM", "LM", "OM"].includes(code)) return "MID";
-  if (code === "MS") return "ATT";
+  if (code === "ST") return "ATT";
   return "SONST";
 }
 
@@ -473,9 +459,10 @@ function spielerGruppen(w) {
 }
 
 function bankEmpfehlung(werte, elf, max = 4) {
-  const rest = werte.filter((w) => w.imKader && !elf.includes(w.name));
+  // Der einzige Torwart des Kaders steht in der Startelf. Die Bank besteht nur aus Feldspielern.
+  const rest = werte.filter((w) => w.imKader && w.haupt !== "TW" && !elf.includes(w.name));
   const gewählt = [];
-  const ziel = ["TW", "DEF", "MID", "ATT"];
+  const ziel = ["DEF", "MID", "ATT"];
 
   // Erst jede Mannschaftszone möglichst einmal absichern.
   ziel.forEach((gruppe) => {
@@ -510,7 +497,7 @@ function bankEmpfehlung(werte, elf, max = 4) {
 }
 
 function reserveEmpfehlung(werte, elf, bank) {
-  const kandidaten = werte.filter((w) => w.kader === "reserve" && !elf.includes(w.name));
+  const kandidaten = werte.filter((w) => w.kader === "reserve" && w.haupt !== "TW" && !elf.includes(w.name));
   if (!kandidaten.length) return null;
   const bankGruppen = new Set(bank.flatMap((w) => spielerGruppen(w)));
   kandidaten.sort((a, b) => {
@@ -994,7 +981,7 @@ function Spielplan({ d, save }) {
     <div className="pb-24">
       <Kopf titel="Spielplan" rechts={<button onClick={neuesSpiel} className="text-sm font-bold px-3 py-1.5 rounded-full" style={{background:C.rot,color:'#fff'}}>+ Spiel</button>} />
       <div className="px-4 pb-3 text-sm" style={{ color: C.grau }}>
-        Kreisliga C · Saison 26/27
+        Kreisliga B · Saison 26/27
       </div>
 
       <div className="px-4 pb-4">
@@ -1079,10 +1066,6 @@ function Kaderplanung({ d, save, berechnet }) {
               von {d.kaderGroesse} Plätzen · {liste.filter((w) => w.kader === "reserve").length} Reserve ·{" "}
               {liste.filter((w) => w.sperre > 0).length} gesperrt
             </span>
-          </div>
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-xs font-bold" style={{color:C.grau}}>Spieltagskader</span>
-            {[11,12,13,14,15,16,17,18].map(n => <button key={n} onClick={()=>save({...d,kaderGroesse:n})} className="w-7 h-7 rounded text-xs font-black" style={{background:d.kaderGroesse===n?C.rot:'#F0E9E5',color:d.kaderGroesse===n?'#fff':C.grau,border:0}}>{n}</button>)}
           </div>
           <div className="mt-4">
             <div className="flex justify-between text-xs font-bold mb-1.5">
@@ -1184,8 +1167,7 @@ function Aufstellung({ d, save, berechnet }) {
     setOffen(null);
   };
 
-  const bankMax = Math.max(0, Math.min(7, Number(d.kaderGroesse || 18) - 11));
-  const bank = bankEmpfehlung(berechnet.werte, elf, bankMax);
+  const bank = bankEmpfehlung(berechnet.werte, elf, 4);
   const reserve = reserveEmpfehlung(berechnet.werte, elf, bank);
 
   return (
@@ -1250,8 +1232,8 @@ function Aufstellung({ d, save, berechnet }) {
       </div>
 
       <div className="px-4 pt-5 pb-2">
-        <div className="text-sm font-black">Bank-Empfehlung · {bankMax} Spieler</div>
-        <div className="text-xs mt-1" style={{color:C.grau}}>Bewusst ausgeglichen: Torwart, Defensive, Mittelfeld und Offensive werden passend zur Kadergröße abgedeckt.</div>
+        <div className="text-sm font-black">Bank-Empfehlung · 4 Spieler</div>
+        <div className="text-xs mt-1" style={{color:C.grau}}>Bewusst ausgeglichen: nur Feldspieler – möglichst Defensive, Mittelfeld und Offensive mehrfach abgedeckt.</div>
         <div className="text-xs mt-1" style={{color:C.grau}}>Automatik berücksichtigt Gesamtscore, letzte 5 Spiele, Positionsstärke und Momentum. Bei weniger als 5 Spielnoten wird die Form vorsichtiger gewichtet.</div>
       </div>
       <div style={{ borderTop: `1px solid ${C.linie}` }}>
@@ -1274,13 +1256,13 @@ function Aufstellung({ d, save, berechnet }) {
       </div>
 
       <div className="px-4 pt-5 pb-2">
-        <div className="text-sm font-black">Nachrücker</div>
-        <div className="text-xs mt-1" style={{color:C.grau}}>Erste Nachrück-Option außerhalb des Spieltagskaders.</div>
+        <div className="text-sm font-black">16. Mann · Reserve</div>
+        <div className="text-xs mt-1" style={{color:C.grau}}>Erste Nachrück-Option, passend zur Abdeckung der vier Bankspieler.</div>
       </div>
       <div style={{ borderTop: `1px solid ${C.linie}`, borderBottom: `1px solid ${C.linie}` }}>
         {reserve ? (
           <Zeile>
-            <span className="text-xs font-black w-5" style={{color:'#8A6D1F'}}>↗</span>
+            <span className="text-xs font-black w-5" style={{color:'#8A6D1F'}}>16.</span>
             <div className="flex-1 min-w-0">
               <div className="font-black truncate">{reserve.name}</div>
               <div className="text-xs" style={{color:C.grau}}>{reserve.reserveGrund} · Wichtigkeit {reserve.reserveWichtigkeit}</div>
@@ -1431,14 +1413,14 @@ function VerlaufExport({ d, save, berechnet }) {
     d.spiele.forEach(sp=>d.spieler.forEach(s=>{const n=spielNote(d,sp.nr,s.name);if(n!=null)rows.push([sp.gegner,sp.datum,s.name,n.toFixed(2),d.spielPositionen?.['g'+sp.nr]?.[s.name]||''])}));
 
     const sheetRows=rows.map(r=>`<Row>${r.map(v=>`<Cell><Data ss:Type="String">${escXml(v)}</Data></Cell>`).join('')}</Row>`).join('');
-    const xml=`<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>\n<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="HAQQ Pro"><Table>${sheetRows}</Table></Worksheet></Workbook>`;
-    const filename=`haqq-pro-demo-${heute()}.xls`;
+    const xml=`<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>\n<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="HAQQ Demo"><Table>${sheetRows}</Table></Worksheet></Workbook>`;
+    const filename=`haqq-demo-export-${heute()}.xls`;
     const blob=new Blob([xml],{type:'application/vnd.ms-excel;charset=utf-8'});
     const file=new File([blob],filename,{type:'application/vnd.ms-excel'});
 
     // iPhone/PWA: Teilen-Dialog ist zuverlässiger als ein unsichtbarer Browser-Download.
     if (navigator.share && navigator.canShare?.({files:[file]})) {
-      try { await navigator.share({files:[file],title:'HAQQ Pro Excel Export'}); return; }
+      try { await navigator.share({files:[file],title:'HAQQ Demo Excel Export'}); return; }
       catch (e) { if (e?.name === 'AbortError') return; }
     }
 
@@ -1581,6 +1563,19 @@ const TABS = [
   ["Positionen", Positionen], ["Verlauf", VerlaufExport],
 ];
 
+function Login({ onLogin }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: C.papier, color: C.tinte }}>
+      <div className="w-full max-w-sm rounded-2xl p-5 shadow-sm" style={{ background: "#fff", border: `1px solid ${C.linie}` }}>
+        <div className="text-xs font-black tracking-widest mb-2" style={{ color: C.rot }}>HAQQ PRO · DEMO</div>
+        <h1 className="text-2xl font-black mb-1">Trainer-Demo</h1>
+        <p className="text-sm mb-5" style={{ color: C.grau }}>Teste HAQQ mit vollständig ausgefüllten Beispieldaten. Alle Änderungen bleiben nur auf diesem Gerät.</p>
+        <button onClick={onLogin} className="w-full py-2.5 rounded-lg font-black text-white" style={{ background: C.rot }}>Demo starten</button>
+      </div>
+    </div>
+  );
+}
+
 function InstallAppButton() {
   const [installPrompt, setInstallPrompt] = useState(null);
   const [installiert, setInstalliert] = useState(() =>
@@ -1628,8 +1623,8 @@ function InstallAppButton() {
   );
 }
 
-function HauptApp({ session }) {
-  const [d, save, status] = useDaten();
+function HauptApp({ session, onLogout }) {
+  const [d, save, status] = useDaten(session);
   const [tab, setTab] = useState(0);
   const berechnet = useMemo(() => (d ? rechne(d) : null), [d]);
 
@@ -1637,7 +1632,7 @@ function HauptApp({ session }) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: C.papier }}>
         <div className="text-sm" style={{ color: C.grau }}>
-          {status === "laden" ? "Teamdaten werden geladen …" : "Daten konnten nicht geladen werden."}
+          {status === "laden" ? "Teamdaten werden geladen …" : "Daten konnten nicht geladen werden. Supabase-Einstellungen prüfen."}
         </div>
       </div>
     );
@@ -1652,13 +1647,14 @@ function HauptApp({ session }) {
         <div className="flex items-center justify-between gap-3">
           <div className="text-white">
             <div className="text-lg font-black leading-none tracking-tight">SV WESTSTADT 03</div>
-            <div className="text-xs opacity-80 mt-1">Kreisliga C2 · Saison 26/27</div>
+            <div className="text-xs opacity-80 mt-1">Kreisliga B · Saison 26/27</div>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-xs text-white text-right" style={{ opacity: status === "speichert" ? 0.9 : 0.65 }}>
               {status === "speichert" ? "speichert …" : status === "fehler" ? "Speicherfehler" : "Demo lokal gespeichert"}
             </div>
             <InstallAppButton />
+            <button onClick={onLogout} className="text-xs font-bold px-2 py-1 rounded" style={{background:"rgba(255,255,255,.16)",color:"#fff"}}>Abmelden</button>
           </div>
         </div>
       </div>
@@ -1675,13 +1671,26 @@ function HauptApp({ session }) {
       <Inhalt d={d} save={save} berechnet={berechnet} session={session} />
 
       <div className="px-4 py-4 text-xs" style={{ color: C.grau }}>
-        Demo-Team mit anonymisierten Beispieldaten · Änderungen werden nur auf diesem Gerät gespeichert.
+        HAQQ Pro Demo · Beispieldaten sind anonymisiert · Änderungen werden lokal auf diesem Gerät gespeichert.
       </div>
     </div>
   );
 }
 
 export default function App() {
-  const demoSession = { user: { id: "demo-trainer", email: "trainer@haqq.demo" } };
-  return <HauptApp session={demoSession} />;
+  const [session, setSession] = useState(() => {
+    try { return localStorage.getItem("haqq-demo-session") ? { user: { id: "demo", email: "demo@haqq.app" } } : null; }
+    catch { return null; }
+  });
+
+  const login = () => {
+    localStorage.setItem("haqq-demo-session", "1");
+    setSession({ user: { id: "demo", email: "demo@haqq.app" } });
+  };
+  const logout = () => {
+    localStorage.removeItem("haqq-demo-session");
+    setSession(null);
+  };
+
+  return session ? <HauptApp session={session} onLogout={logout} /> : <Login onLogin={login} />;
 }
