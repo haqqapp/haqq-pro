@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 
 /* ---------------------------------------------------------------- Konstanten */
 const KEY = "haqq-pro-demo-v1";
+const SUPPORT_URL = "https://www.saruzugo.de";
 const POS = ["TW", "IV", "LV", "RV", "DM", "ZM", "OM", "LM", "RM", "MS"];
 const POS_LANG = {
   TW: "Torwart", IV: "Innenverteidiger", LV: "Linksverteidiger", RV: "Rechtsverteidiger",
@@ -1864,9 +1865,83 @@ function Positionen({ d, save }) {
   );
 }
 
+/* ---------------------------------------------------------------- Kunden-Dashboard */
+function Dashboard({ d, berechnet, setTab }) {
+  const kommende = [...(d.spiele || [])]
+    .filter((s) => s.datum && s.datum >= heute())
+    .sort((a, b) => a.datum.localeCompare(b.datum) || (a.zeit || "").localeCompare(b.zeit || ""));
+  const naechstes = kommende[0] || null;
+  const formation = d.formation || "4-2-3-1";
+  const elf = vorschlaege(berechnet.werte, formation, d.elf || {});
+  const besetzt = elf.filter(Boolean).length;
+  const verfuegbar = berechnet.werte.filter((w) => w.aktiv !== false && w.verfuegbar && w.sperre === 0).length;
+  const letzterTermin = [...(d.trainings || [])].filter(t=>t.datum<=heute()).sort((a,b)=>b.datum.localeCompare(a.datum))[0];
+  const letzteAnwesend = letzterTermin ? (d.anwesend?.[letzterTermin.id] || []).length : 0;
+
+  const geheZu = (name) => {
+    const i = TABS.findIndex(([n]) => n === name);
+    if (i >= 0) setTab(i);
+  };
+
+  return <div className="pb-24">
+    <div className="px-4 pt-5 pb-3">
+      <div className="text-xs font-black tracking-widest" style={{color:C.rot}}>DEIN TEAM</div>
+      <h2 className="text-3xl font-black tracking-tight mt-1" style={{color:C.tinte}}>Dashboard</h2>
+      <p className="text-sm mt-1" style={{color:C.grau}}>Alles Wichtige für den nächsten Spieltag auf einen Blick.</p>
+    </div>
+
+    <div className="px-4 grid gap-3">
+      <div className="rounded-2xl p-4" style={{background:'#fff',border:`1px solid ${C.linie}`}}>
+        <div className="text-xs font-black tracking-wide" style={{color:C.grau}}>NÄCHSTES SPIEL</div>
+        {naechstes ? <>
+          <div className="mt-2 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-2xl font-black truncate">{naechstes.gegner}</div>
+              <div className="text-sm mt-1" style={{color:C.grau}}>{fmtDatum(naechstes.datum)}{naechstes.zeit ? ` · ${naechstes.zeit}` : ''}{naechstes.ha ? ` · ${naechstes.ha==='H'?'Heim':'Auswärts'}` : ''}</div>
+              <div className="text-xs mt-1" style={{color:C.grau}}>{naechstes.wb || 'Spiel'}</div>
+            </div>
+            <button onClick={()=>geheZu('Spielplan')} className="shrink-0 text-sm font-black px-3 py-2 rounded-xl" style={{background:C.rot,color:'#fff'}}>Spielplan</button>
+          </div>
+        </> : <div className="mt-2 text-sm" style={{color:C.grau}}>Noch kein kommendes Spiel eingetragen.</div>}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <button onClick={()=>geheZu('Aufstellung')} className="text-left rounded-2xl p-4" style={{background:'#fff',border:`1px solid ${C.linie}`}}>
+          <div className="text-xs font-black" style={{color:C.grau}}>AUFSTELLUNG</div>
+          <div className="text-2xl font-black mt-1" style={{color:C.rot}}>{formation}</div>
+          <div className="text-xs mt-1" style={{color:C.grau}}>{besetzt}/11 Positionen besetzt</div>
+        </button>
+        <button onClick={()=>geheZu('Kader')} className="text-left rounded-2xl p-4" style={{background:'#fff',border:`1px solid ${C.linie}`}}>
+          <div className="text-xs font-black" style={{color:C.grau}}>VERFÜGBAR</div>
+          <div className="text-2xl font-black mt-1" style={{color:C.rasen}}>{verfuegbar}</div>
+          <div className="text-xs mt-1" style={{color:C.grau}}>Spieler aktuell einsatzbereit</div>
+        </button>
+      </div>
+
+      <div className="rounded-2xl p-4" style={{background:'#fff',border:`1px solid ${C.linie}`}}>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-black" style={{color:C.grau}}>LETZTES TRAINING</div>
+            <div className="font-black mt-1">{letzterTermin ? fmtDatum(letzterTermin.datum) : 'Noch kein Training'}</div>
+            {letzterTermin && <div className="text-xs mt-1" style={{color:C.grau}}>{letzteAnwesend} Spieler anwesend</div>}
+          </div>
+          <button onClick={()=>geheZu('Training')} className="text-sm font-black px-3 py-2 rounded-xl" style={{background:C.papier,border:`1px solid ${C.linie}`}}>Training</button>
+        </div>
+      </div>
+
+      <div>
+        <div className="text-sm font-black mb-2">Schnellzugriff</div>
+        <div className="grid grid-cols-2 gap-2">
+          {[['Aufstellung','Aufstellung'],['Bewertung','Bewertung'],['Training','Training'],['Excel Import','Verlauf']].map(([label,ziel])=><button key={label} onClick={()=>geheZu(ziel)} className="rounded-xl px-3 py-3 text-sm font-black text-left" style={{background:label==='Excel Import'?C.rot:'#fff',color:label==='Excel Import'?'#fff':C.tinte,border:`1px solid ${label==='Excel Import'?C.rot:C.linie}`}}>{label}</button>)}
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
 /* ---------------------------------------------------------------- App */
 const TABS = [
-  ["Training", Training], ["Bewertung", Noten], ["Spieler", Spielerprofile],
+  ["Dashboard", Dashboard], ["Training", Training], ["Bewertung", Noten], ["Spieler", Spielerprofile],
   ["Übersicht", Uebersicht], ["Aushang", Aushang], ["Spielplan", Spielplan],
   ["Kader", Kaderplanung], ["Aufstellung", Aufstellung],
   ["Positionen", Positionen], ["Verlauf", VerlaufExport],
@@ -2124,6 +2199,13 @@ function HauptApp({ session }) {
             <div className="text-xs text-white text-right" style={{ opacity: status === "speichert" ? 0.9 : 0.65 }}>
               {status === "speichert" ? "speichert …" : status === "fehler" ? "Speicherfehler" : "live synchronisiert"}
             </div>
+            <button
+              onClick={() => window.open(SUPPORT_URL, "_blank", "noopener,noreferrer")}
+              className="text-xs font-bold px-2 py-1 rounded"
+              style={{ background: "rgba(255,255,255,.14)", color: "#fff", border: "1px solid rgba(255,255,255,.28)" }}
+            >
+              Support
+            </button>
             <InstallAppButton />
             <button
               onClick={abmelden}
@@ -2145,7 +2227,7 @@ function HauptApp({ session }) {
         ))}
       </div>
 
-      <Inhalt d={d} save={save} berechnet={berechnet} session={session} />
+      <Inhalt d={d} save={save} berechnet={berechnet} session={session} setTab={setTab} team={team} />
 
       <div className="px-4 py-4 text-xs" style={{ color: C.grau }}>
         Dein Team-Datenstand ist getrennt von anderen Teams gespeichert · Änderungen werden über Supabase synchronisiert.
