@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase, supabaseConfigured } from "./supabase.js";
+import * as XLSX from "xlsx";
 
 /* ---------------------------------------------------------------- Konstanten */
 const KEY = "haqq-pro-demo-v1";
@@ -204,80 +205,133 @@ function aenderungsText(alt, neu) {
 
 function useDaten(session) {
   const [daten, setDaten] = useState(null);
+  const [team, setTeam] = useState(null);
   const [status, setStatus] = useState("laden");
   const datenRef = React.useRef(null);
+  const teamRef = React.useRef(null);
 
   useEffect(() => { datenRef.current = daten; }, [daten]);
+  useEffect(() => { teamRef.current = team; }, [team]);
 
   useEffect(() => {
     if (!session || !supabase) return;
     let aktiv = true;
+    let channel = null;
+
+    const holeOderErstelleTeam = async () => {
+      const uid = session.user.id;
+
+      const { data: mitglied, error: mitgliedFehler } = await supabase
+        .from("team_members")
+        .select("team_id, role")
+        .eq("user_id", uid)
+        .limit(1)
+        .maybeSingle();
+      if (mitgliedFehler) throw mitgliedFehler;
+
+      if (mitglied?.team_id) {
+        const { data: vorhandenesTeam, error: teamFehler } = await supabase
+          .from("teams")
+          .select("id, name, created_by")
+          .eq("id", mitglied.team_id)
+          .single();
+        if (teamFehler) throw teamFehler;
+        return { ...vorhandenesTeam, role: mitglied.role || "trainer" };
+      }
+
+      // Falls das Team schon angelegt wurde, aber die Mitgliedschaft beim ersten
+      // Versuch noch nicht geschrieben werden konnte, verwenden wir es weiter.
+      const { data: eigenesTeam, error: eigenesTeamFehler } = await supabase
+        .from("teams")
+        .select("id, name, created_by")
+        .eq("created_by", uid)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (eigenesTeamFehler) throw eigenesTeamFehler;
+
+      let neuesTeam = eigenesTeam;
+      if (!neuesTeam) {
+        const teamName = (session.user.user_metadata?.team_name || "Mein Team").trim() || "Mein Team";
+        const { data: erstellt, error: erstellenFehler } = await supabase
+          .from("teams")
+          .insert({ name: teamName, created_by: uid })
+          .select("id, name, created_by")
+          .single();
+        if (erstellenFehler) throw erstellenFehler;
+        neuesTeam = erstellt;
+      }
+
+      const { error: beitrittFehler } = await supabase
+        .from("team_members")
+        .upsert({ team_id: neuesTeam.id, user_id: uid, role: "owner" }, { onConflict: "team_id,user_id" });
+      if (beitrittFehler) throw beitrittFehler;
+
+      return { ...neuesTeam, role: "owner" };
+    };
 
     const laden = async () => {
-      setStatus("laden");
-      const { data, error } = await supabase
-        .from("app_state")
-        .select("data")
-        .eq("id", "main")
-        .maybeSingle();
+      try {
+        setStatus("laden");
+        const aktTeam = await holeOderErstelleTeam();
+        if (!aktiv) return;
+        setTeam(aktTeam);
+        teamRef.current = aktTeam;
 
-      if (!aktiv) return;
-      if (error) {
-        console.error(error);
-        setStatus("fehler");
-        return;
-      }
+        const { data, error } = await supabase
+          .from("team_state")
+          .select("data")
+          .eq("team_id", aktTeam.id)
+          .maybeSingle();
+        if (error) throw error;
 
-      if (data?.data) {
-        const normal = normalisiereDaten(data.data);
-        setDaten(normal);
-        datenRef.current = normal;
+        if (data?.data && Object.keys(data.data).length) {
+          const normal = normalisiereDaten(data.data);
+          setDaten(normal);
+          datenRef.current = normal;
+        } else {
+          const initial = normalisiereDaten(startDaten());
+          const { error: insertError } = await supabase
+            .from("team_state")
+            .upsert({ team_id: aktTeam.id, data: initial, updated_by: session.user.id });
+          if (insertError) throw insertError;
+          setDaten(initial);
+          datenRef.current = initial;
+        }
         setStatus("bereit");
-        return;
-      }
 
-      const initial = normalisiereDaten(startDaten());
-      const { error: insertError } = await supabase
-        .from("app_state")
-        .upsert({ id: "main", data: initial, updated_by: session.user.id });
-
-      if (!aktiv) return;
-      if (insertError) {
-        console.error(insertError);
-        setStatus("fehler");
-      } else {
-        setDaten(initial);
-        datenRef.current = initial;
-        setStatus("bereit");
+        channel = supabase
+          .channel(`haqq-pro-team-${aktTeam.id}`)
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "team_state", filter: `team_id=eq.${aktTeam.id}` },
+            (payload) => {
+              if (payload.new?.data) {
+                const normal = normalisiereDaten(payload.new.data);
+                setDaten(normal);
+                datenRef.current = normal;
+                setStatus("bereit");
+              }
+            }
+          )
+          .subscribe();
+      } catch (error) {
+        console.error("Teamdaten konnten nicht geladen werden:", error);
+        if (aktiv) setStatus("fehler");
       }
     };
 
     laden();
 
-    const channel = supabase
-      .channel("haqq-pro-app-state-v1")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "app_state", filter: "id=eq.main" },
-        (payload) => {
-          if (payload.new?.data) {
-            const normal = normalisiereDaten(payload.new.data);
-            setDaten(normal);
-            datenRef.current = normal;
-            setStatus("bereit");
-          }
-        }
-      )
-      .subscribe();
-
     return () => {
       aktiv = false;
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
     };
   }, [session?.user?.id]);
 
   const speichern = useCallback(async (neu, aktion) => {
-    if (!session || !supabase) return;
+    const aktTeam = teamRef.current;
+    if (!session || !supabase || !aktTeam) return;
     const alt = datenRef.current;
     const normal = normalisiereDaten(neu);
     const eintrag = {
@@ -293,8 +347,8 @@ function useDaten(session) {
     setStatus("speichert");
 
     const { error } = await supabase
-      .from("app_state")
-      .upsert({ id: "main", data: normal, updated_by: session.user.id });
+      .from("team_state")
+      .upsert({ team_id: aktTeam.id, data: normal, updated_by: session.user.id });
 
     if (error) {
       console.error(error);
@@ -304,7 +358,7 @@ function useDaten(session) {
     }
   }, [session?.user?.id]);
 
-  return [daten, speichern, status];
+  return [daten, speichern, status, team];
 }
 /* ---------------------------------------------------------------- Berechnung */
 function trainerEintraege(d, spielNr, name) {
@@ -1510,45 +1564,125 @@ function VerlaufExport({ d, save, berechnet }) {
   const excelImport=async(file)=>{
     if(!file) return;
     try {
-      const text=await file.text();
-      let rows=[];
-      if(file.name.toLowerCase().endsWith('.xls')) {
-        const doc=new DOMParser().parseFromString(text,'application/xml');
-        rows=[...doc.getElementsByTagName('Row')].map(r=>[...r.getElementsByTagName('Data')].map(x=>x.textContent||''));
-      } else {
-        rows=text.split(/\r?\n/).filter(Boolean).map(line=>line.split(/[;,]/).map(x=>x.replace(/^"|"$/g,'').trim()));
-      }
-      if(!rows.length) throw new Error('leer');
-      const neu=JSON.parse(JSON.stringify(d));
-      const head=rows.findIndex(r=>r[0]==='Spieler');
-      if(head>=0){
-        for(let i=head+1;i<rows.length && rows[i][0];i++){
-          const [name,haupt,alternativen,staerken]=rows[i];
-          const sp=neu.spieler.find(s=>s.name===name); if(!sp) continue;
-          sp.haupt=haupt||sp.haupt;
-          sp.neben=(alternativen||'').split('|').map(x=>x.trim()).filter(Boolean);
-          sp.posStaerke=sp.posStaerke||{};
-          if(sp.haupt && sp.posStaerke[sp.haupt]==null) sp.posStaerke[sp.haupt]=100;
-          sp.neben.forEach(p=>{if(sp.posStaerke[p]==null) sp.posStaerke[p]=70});
-          (staerken||'').split('|').map(x=>x.trim()).filter(Boolean).forEach(x=>{const [p,v]=x.split(':'); const n=Number(String(v||'').replace('%','')); if(p && Number.isFinite(n)) sp.posStaerke[p.trim()]=n;});
+      const ext=(file.name.split('.').pop()||'').toLowerCase();
+      let neu=JSON.parse(JSON.stringify(d));
+
+      // Neue HAQQ-Vorlage (.xlsx/.xls): mehrere Tabellenblätter vollständig einlesen.
+      if(ext==='xlsx' || ext==='xls') {
+        const buffer=await file.arrayBuffer();
+        const wb=XLSX.read(buffer,{type:'array',cellDates:false});
+        const sheetRows=(name)=>{
+          const ws=wb.Sheets[name];
+          return ws ? XLSX.utils.sheet_to_json(ws,{defval:'',raw:false}) : [];
+        };
+        const yes=(v,def=true)=>{
+          if(v==='' || v==null) return def;
+          const x=String(v).trim().toLowerCase();
+          return ['ja','j','yes','true','1','x'].includes(x);
+        };
+        const split=(v)=>String(v||'').split('|').map(x=>x.trim()).filter(Boolean);
+        const parseStaerken=(v,haupt,neben)=>{
+          const out={};
+          split(v).forEach(x=>{ const [p,n]=x.split(':'); const num=Number(String(n||'').replace('%','').trim()); if(p?.trim() && Number.isFinite(num)) out[p.trim()]=Math.max(0,Math.min(100,num)); });
+          if(haupt && out[haupt]==null) out[haupt]=100;
+          neben.forEach(p=>{ if(out[p]==null) out[p]=70; });
+          return out;
+        };
+
+        const sr=sheetRows('Spieler').filter(r=>String(r['Name']||'').trim());
+        if(sr.length){
+          neu.spieler=sr.map(r=>{
+            const name=String(r['Name']).trim();
+            const haupt=String(r['Hauptposition']||'').trim().toUpperCase();
+            const neben=split(r['Nebenpositionen']).map(x=>x.toUpperCase()).filter(x=>x && x!==haupt);
+            return {
+              name,
+              haupt,
+              neben,
+              posStaerke:parseStaerken(r['Positionsstärken'],haupt,neben),
+              dabeiSeit:String(r['Dabei seit']||heute()).slice(0,10),
+              aktivBis:String(r['Aktiv bis']||'').slice(0,10),
+              aktiv:yes(r['Aktiv'],true),
+              verfuegbar:yes(r['Verfügbar'],true),
+              fix:yes(r['Fix'],false),
+              sperre:Math.max(0,Number(r['Sperre']||0)||0),
+            };
+          }).sort((a,b)=>a.name.localeCompare(b.name,'de'));
         }
-      }
-      const bh=rows.findIndex(r=>r[0]==='Spiel' && r[2]==='Spieler');
-      if(bh>=0){
-        for(let i=bh+1;i<rows.length && rows[i][0];i++){
-          const [gegner,datum,name,note,pos]=rows[i];
-          const sp=neu.spiele.find(s=>s.gegner===gegner && (!datum || s.datum===datum));
-          if(!sp || !name || note==='') continue;
-          const n=Number(String(note).replace(',','.')); if(!Number.isFinite(n)) continue;
-          const key='g'+sp.nr; neu.noten[key]={...(neu.noten[key]||{}),[name]:n};
-          if(pos) neu.spielPositionen[key]={...(neu.spielPositionen[key]||{}),[name]:pos};
+
+        const tr=sheetRows('Trainings').filter(r=>String(r['Datum']||'').trim());
+        if(tr.length){
+          neu.trainings=tr.map((r,i)=>({id:`imp-t-${i+1}-${String(r['Datum']).slice(0,10)}`,datum:String(r['Datum']).slice(0,10)}));
+          neu.anwesend={};
+          tr.forEach((r,i)=>{ neu.anwesend[neu.trainings[i].id]=split(r['Anwesend']).filter(n=>neu.spieler.some(s=>s.name===n)); });
         }
+
+        const gr=sheetRows('Spiele').filter(r=>String(r['Gegner']||'').trim());
+        if(gr.length){
+          neu.spiele=gr.map((r,i)=>({
+            nr:Number(r['Nr']||i+1)||i+1,
+            datum:String(r['Datum']||'').slice(0,10),
+            zeit:String(r['Uhrzeit']||''),
+            gegner:String(r['Gegner']).trim(),
+            ha:String(r['H/A']||'').trim().toUpperCase(),
+            wb:String(r['Wettbewerb']||'').trim(),
+            tf:r['Tore HAQQ']===''?null:Number(r['Tore HAQQ']),
+            tg:r['Gegentore']===''?null:Number(r['Gegentore']),
+          })).sort((a,b)=>(a.datum||'9999').localeCompare(b.datum||'9999')||a.nr-b.nr);
+        }
+
+        const br=sheetRows('Bewertungen').filter(r=>String(r['Spiel Nr']||'').trim() && String(r['Spieler']||'').trim());
+        if(br.length){
+          neu.noten={};
+          neu.spielPositionen={};
+          br.forEach(r=>{
+            const nr=Number(r['Spiel Nr']); const name=String(r['Spieler']).trim(); const note=Number(String(r['Note']).replace(',','.'));
+            if(!Number.isFinite(nr) || !Number.isFinite(note) || !neu.spieler.some(s=>s.name===name)) return;
+            const key='g'+nr;
+            neu.noten[key]={...(neu.noten[key]||{}),[name]:Math.max(0,Math.min(10,note))};
+            const pos=String(r['Position']||'').trim().toUpperCase();
+            if(pos) neu.spielPositionen[key]={...(neu.spielPositionen[key]||{}),[name]:pos};
+          });
+        }
+
+        // Alte Trainer-Einzelnoten passen nach einem Vollimport nicht zwingend zum neuen Kader.
+        neu.trainerNoten={};
+        neu.elf={};
+        neu.aenderungen=[];
+        save(neu,`HAQQ Excel-Vorlage importiert: ${file.name}`);
+        alert(`Import erfolgreich: ${neu.spieler.length} Spieler, ${neu.trainings.length} Trainings, ${neu.spiele.length} Spiele.`);
+        return;
       }
-      save(neu,`Excel/CSV importiert: ${file.name}`);
-      alert('Import erfolgreich. Positionen und Spielbewertungen wurden übernommen.');
-    } catch(e) { console.error(e); alert('Import nicht erkannt. Unterstützt werden der Export dieser App (.xls) oder CSV mit passenden Spalten.'); }
+
+      // CSV-Fallback: Spieler-Stammdaten mit den gleichen Spalten wie im Blatt "Spieler".
+      if(ext==='csv') {
+        const text=await file.text();
+        const lines=text.split(/\r?\n/).filter(Boolean);
+        if(lines.length<2) throw new Error('CSV ist leer');
+        const sep=lines[0].includes(';')?';':',';
+        const headers=lines[0].split(sep).map(x=>x.replace(/^"|"$/g,'').trim());
+        const rows=lines.slice(1).map(line=>{
+          const vals=line.split(sep).map(x=>x.replace(/^"|"$/g,'').trim());
+          return Object.fromEntries(headers.map((h,i)=>[h,vals[i]??'']));
+        }).filter(r=>r.Name);
+        if(!rows.length) throw new Error('Keine Spieler gefunden');
+        neu.spieler=rows.map(r=>({
+          name:r.Name.trim(), haupt:(r.Hauptposition||'').toUpperCase(), neben:String(r.Nebenpositionen||'').split('|').map(x=>x.trim().toUpperCase()).filter(Boolean),
+          posStaerke:{}, sperre:Number(r.Sperre||0)||0, verfuegbar:true, fix:false, dabeiSeit:(r['Dabei seit']||heute()).slice(0,10), aktivBis:'', aktiv:true
+        }));
+        neu.spieler.forEach(s=>{ if(s.haupt)s.posStaerke[s.haupt]=100; s.neben.forEach(p=>{if(p!==s.haupt)s.posStaerke[p]=70}); });
+        save(neu,`CSV importiert: ${file.name}`);
+        alert(`Import erfolgreich: ${neu.spieler.length} Spieler.`);
+        return;
+      }
+
+      throw new Error('Bitte .xlsx, .xls oder .csv verwenden.');
+    } catch(e) {
+      console.error(e);
+      alert(`Import fehlgeschlagen: ${e?.message || 'Datei nicht erkannt'}`);
+    }
   };
-  return <div className="pb-24"><Kopf titel="Verlauf & Export" rechts={<div className="flex gap-2"><label className="text-sm font-bold px-3 py-1.5 rounded-full cursor-pointer" style={{background:'#fff',color:C.rot,border:`1px solid ${C.rot}`}}>Import<input type="file" accept=".xls,.csv,text/csv,application/vnd.ms-excel" className="hidden" onChange={(e)=>{excelImport(e.target.files?.[0]);e.target.value=''}}/></label><button onClick={excelExport} className="text-sm font-bold px-3 py-1.5 rounded-full" style={{background:C.rot,color:'#fff'}}>Excel Export</button></div>}/><div className="px-4 pb-3 text-sm" style={{color:C.grau}}>Export: Excel-Datei. Import: der Export dieser App (.xls) oder CSV. Positionen, Positionsstärken und Spielbewertungen werden übernommen.</div><div style={{borderTop:`1px solid ${C.linie}`}}>{(d.aenderungen||[]).length?(d.aenderungen||[]).map(x=><div key={x.id} className="px-4 py-3" style={{borderBottom:`1px solid ${C.linie}`}}><div className="font-bold">{x.aktion}</div><div className="text-xs mt-1" style={{color:C.grau}}>{x.trainer} · {new Date(x.zeit).toLocaleString('de-DE')}</div></div>):<div className="p-4 text-sm" style={{color:C.grau}}>Der Verlauf beginnt mit Änderungen ab Version 2.</div>}</div></div>;
+  return <div className="pb-24"><Kopf titel="Verlauf & Export" rechts={<div className="flex gap-2"><label className="text-sm font-bold px-3 py-1.5 rounded-full cursor-pointer" style={{background:'#fff',color:C.rot,border:`1px solid ${C.rot}`}}>Import<input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" className="hidden" onChange={(e)=>{excelImport(e.target.files?.[0]);e.target.value=''}}/></label><button onClick={excelExport} className="text-sm font-bold px-3 py-1.5 rounded-full" style={{background:C.rot,color:'#fff'}}>Excel Export</button></div>}/><div className="px-4 pb-3 text-sm" style={{color:C.grau}}>Import: HAQQ-Team-Vorlage (.xlsx/.xls) oder CSV. Die Vorlage kann Spieler, Trainings, Spiele und Bewertungen auf einmal einlesen.</div><div style={{borderTop:`1px solid ${C.linie}`}}>{(d.aenderungen||[]).length?(d.aenderungen||[]).map(x=><div key={x.id} className="px-4 py-3" style={{borderBottom:`1px solid ${C.linie}`}}><div className="font-bold">{x.aktion}</div><div className="text-xs mt-1" style={{color:C.grau}}>{x.trainer} · {new Date(x.zeit).toLocaleString('de-DE')}</div></div>):<div className="p-4 text-sm" style={{color:C.grau}}>Der Verlauf beginnt mit Änderungen ab Version 2.</div>}</div></div>;
 }
 
 /* ---------------------------------------------------------------- Positionen */
@@ -1643,6 +1777,7 @@ function Login() {
   const [modus, setModus] = useState("login");
   const [email, setEmail] = useState("");
   const [passwort, setPasswort] = useState("");
+  const [teamName, setTeamName] = useState("");
   const [meldung, setMeldung] = useState("");
   const [erfolg, setErfolg] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1669,6 +1804,10 @@ function Login() {
       }
 
       if (modus === "registrieren") {
+        if (!teamName.trim()) {
+          setMeldung("Bitte gib den Namen deines Teams ein.");
+          return;
+        }
         if (passwort.length < 8) {
           setMeldung("Bitte mindestens 8 Zeichen für das Passwort verwenden.");
           return;
@@ -1676,7 +1815,10 @@ function Login() {
         const { data, error } = await supabase.auth.signUp({
           email,
           password: passwort,
-          options: { emailRedirectTo: window.location.origin },
+          options: {
+            emailRedirectTo: window.location.origin,
+            data: { team_name: teamName.trim() },
+          },
         });
         if (error) throw error;
         if (data.session) {
@@ -1718,6 +1860,13 @@ function Login() {
         <div className="text-xs font-black tracking-widest mb-2" style={{ color: C.rot }}>HAQQ PRO</div>
         <h1 className="text-2xl font-black mb-1">{titel}</h1>
         <p className="text-sm mb-5" style={{ color: C.grau }}>{beschreibung}</p>
+
+        {modus === "registrieren" && <>
+          <label className="block text-xs font-bold mb-1">Teamname</label>
+          <input value={teamName} onChange={(e) => setTeamName(e.target.value)} type="text" required autoComplete="organization"
+            placeholder="z. B. SV Beispiel II"
+            className="w-full rounded-lg px-3 py-2 mb-3" style={{ border: `1px solid ${C.linie}`, background: C.papier }} />
+        </>}
 
         <label className="block text-xs font-bold mb-1">E-Mail</label>
         <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required autoComplete="email"
@@ -1839,7 +1988,7 @@ function InstallAppButton() {
 }
 
 function HauptApp({ session }) {
-  const [d, save, status] = useDaten(session);
+  const [d, save, status, team] = useDaten(session);
   const [tab, setTab] = useState(0);
   const berechnet = useMemo(() => (d ? rechne(d) : null), [d]);
 
@@ -1869,8 +2018,8 @@ function HauptApp({ session }) {
       <div className="app-header px-4 pb-3" style={{ background: C.rot }}>
         <div className="flex items-center justify-between gap-3">
           <div className="text-white">
-            <div className="text-lg font-black leading-none tracking-tight">HAQQ PRO DEMO</div>
-            <div className="text-xs opacity-80 mt-1">Demo-Team · Saison 26/27</div>
+            <div className="text-lg font-black leading-none tracking-tight">HAQQ PRO</div>
+            <div className="text-xs opacity-80 mt-1">{team?.name || "Mein Team"} · Saison 26/27</div>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-xs text-white text-right" style={{ opacity: status === "speichert" ? 0.9 : 0.65 }}>
@@ -1900,7 +2049,7 @@ function HauptApp({ session }) {
       <Inhalt d={d} save={save} berechnet={berechnet} session={session} />
 
       <div className="px-4 py-4 text-xs" style={{ color: C.grau }}>
-        Gemeinsamer Team-Datenstand über Supabase · Änderungen werden live zwischen euren Geräten synchronisiert.
+        Dein Team-Datenstand ist getrennt von anderen Teams gespeichert · Änderungen werden über Supabase synchronisiert.
       </div>
     </div>
   );
