@@ -1567,119 +1567,218 @@ function VerlaufExport({ d, save, berechnet }) {
       const ext=(file.name.split('.').pop()||'').toLowerCase();
       let neu=JSON.parse(JSON.stringify(d));
 
-      // Neue HAQQ-Vorlage (.xlsx/.xls): mehrere Tabellenblätter vollständig einlesen.
       if(ext==='xlsx' || ext==='xls') {
         const buffer=await file.arrayBuffer();
         const wb=XLSX.read(buffer,{type:'array',cellDates:false});
+
+        // Pflichtfeld-Sternchen in der Vorlage werden hier automatisch entfernt.
+        const cleanKey=(k)=>String(k||'').trim().replace(/\*+$/,'').trim();
         const sheetRows=(name)=>{
           const ws=wb.Sheets[name];
-          return ws ? XLSX.utils.sheet_to_json(ws,{defval:'',raw:false}) : [];
+          if(!ws) return [];
+          return XLSX.utils.sheet_to_json(ws,{defval:'',raw:false}).map(row=>
+            Object.fromEntries(Object.entries(row).map(([k,v])=>[cleanKey(k),v]))
+          );
+        };
+        const str=(v)=>String(v??'').trim();
+        const datum=(v)=>str(v).slice(0,10);
+        const num=(v,def=0)=>{
+          if(v==='' || v==null) return def;
+          const n=Number(String(v).replace(',','.').replace('%','').trim());
+          return Number.isFinite(n)?n:def;
         };
         const yes=(v,def=true)=>{
           if(v==='' || v==null) return def;
-          const x=String(v).trim().toLowerCase();
-          return ['ja','j','yes','true','1','x'].includes(x);
+          const x=str(v).toLowerCase();
+          if(['ja','j','yes','true','1','x'].includes(x)) return true;
+          if(['nein','n','no','false','0'].includes(x)) return false;
+          return def;
         };
-        const split=(v)=>String(v||'').split('|').map(x=>x.trim()).filter(Boolean);
+        const split=(v)=>str(v).split('|').map(x=>x.trim()).filter(Boolean);
         const parseStaerken=(v,haupt,neben)=>{
           const out={};
-          split(v).forEach(x=>{ const [p,n]=x.split(':'); const num=Number(String(n||'').replace('%','').trim()); if(p?.trim() && Number.isFinite(num)) out[p.trim()]=Math.max(0,Math.min(100,num)); });
+          split(v).forEach(x=>{
+            const [p,n]=x.split(':');
+            const code=str(p).toUpperCase();
+            const wert=num(n,NaN);
+            if(code && Number.isFinite(wert)) out[code]=Math.max(0,Math.min(100,wert));
+          });
           if(haupt && out[haupt]==null) out[haupt]=100;
           neben.forEach(p=>{ if(out[p]==null) out[p]=70; });
           return out;
         };
 
-        const sr=sheetRows('Spieler').filter(r=>String(r['Name']||'').trim());
-        if(sr.length){
-          neu.spieler=sr.map(r=>{
-            const name=String(r['Name']).trim();
-            const haupt=String(r['Hauptposition']||'').trim().toUpperCase();
-            const neben=split(r['Nebenpositionen']).map(x=>x.toUpperCase()).filter(x=>x && x!==haupt);
-            return {
-              name,
-              haupt,
-              neben,
-              posStaerke:parseStaerken(r['Positionsstärken'],haupt,neben),
-              dabeiSeit:String(r['Dabei seit']||heute()).slice(0,10),
-              aktivBis:String(r['Aktiv bis']||'').slice(0,10),
-              aktiv:yes(r['Aktiv'],true),
-              verfuegbar:yes(r['Verfügbar'],true),
-              fix:yes(r['Fix'],false),
-              sperre:Math.max(0,Number(r['Sperre']||0)||0),
-            };
-          }).sort((a,b)=>a.name.localeCompare(b.name,'de'));
-        }
+        const spielerRows=sheetRows('Spieler').filter(r=>str(r['Name']));
+        if(!spielerRows.length) throw new Error('Im Blatt Spieler wurden keine Spieler gefunden.');
 
-        const tr=sheetRows('Trainings').filter(r=>String(r['Datum']||'').trim());
-        if(tr.length){
-          neu.trainings=tr.map((r,i)=>({id:`imp-t-${i+1}-${String(r['Datum']).slice(0,10)}`,datum:String(r['Datum']).slice(0,10)}));
-          neu.anwesend={};
-          tr.forEach((r,i)=>{ neu.anwesend[neu.trainings[i].id]=split(r['Anwesend']).filter(n=>neu.spieler.some(s=>s.name===n)); });
-        }
+        // Vollimport: Der Kader aus Excel ersetzt den bisherigen Kader. Dadurch werden neue Spieler wirklich angelegt.
+        neu.spieler=spielerRows.map(r=>{
+          const name=str(r['Name']);
+          const haupt=str(r['Hauptposition']).toUpperCase();
+          const neben=split(r['Nebenpositionen']).map(x=>x.toUpperCase()).filter(x=>x && x!==haupt);
+          return {
+            name,
+            trikotnummer:str(r['Trikotnummer']),
+            haupt,
+            neben,
+            posStaerke:parseStaerken(r['Positionsstärken'],haupt,neben),
+            dabeiSeit:datum(r['Dabei seit'])||heute(),
+            aktivBis:datum(r['Aktiv bis']),
+            aktiv:yes(r['Aktiv'],true),
+            verfuegbar:yes(r['Verfügbar'],true),
+            fix:yes(r['Fix'],false),
+            sperre:Math.max(0,Math.round(num(r['Sperre'],0))),
+          };
+        }).sort((a,b)=>a.name.localeCompare(b.name,'de'));
+        const spielerNamen=new Set(neu.spieler.map(s=>s.name));
 
-        const gr=sheetRows('Spiele').filter(r=>String(r['Gegner']||'').trim());
-        if(gr.length){
-          neu.spiele=gr.map((r,i)=>({
-            nr:Number(r['Nr']||i+1)||i+1,
-            datum:String(r['Datum']||'').slice(0,10),
-            zeit:String(r['Uhrzeit']||''),
-            gegner:String(r['Gegner']).trim(),
-            ha:String(r['H/A']||'').trim().toUpperCase(),
-            wb:String(r['Wettbewerb']||'').trim(),
-            tf:r['Tore HAQQ']===''?null:Number(r['Tore HAQQ']),
-            tg:r['Gegentore']===''?null:Number(r['Gegentore']),
-          })).sort((a,b)=>(a.datum||'9999').localeCompare(b.datum||'9999')||a.nr-b.nr);
-        }
+        // Team-Einstellungen
+        const teamRows=sheetRows('Team').filter(r=>str(r['Feld']));
+        const team=Object.fromEntries(teamRows.map(r=>[str(r['Feld']),r['Wert']]));
+        neu.teamInfo={
+          name:str(team['Teamname']),
+          saison:str(team['Saison']),
+          liga:str(team['Liga']),
+        };
+        if(team['Kadergröße']!=='') neu.kaderGroesse=Math.max(11,Math.round(num(team['Kadergröße'],neu.kaderGroesse||15)));
+        if(team['Reserveplätze']!=='') neu.reserve=Math.max(0,Math.round(num(team['Reserveplätze'],neu.reserve||1)));
+        if(team['Leistung Prozent']!=='') neu.wNote=Math.max(0,Math.min(1,num(team['Leistung Prozent'],70)/100));
+        if(team['Training Prozent']!=='') neu.wTraining=Math.max(0,Math.min(1,num(team['Training Prozent'],30)/100));
+        if(team['Leistung Prozent']!=='' && team['Training Prozent']==='') neu.wTraining=Math.max(0,Math.min(1,1-neu.wNote));
+        if(team['Training Prozent']!=='' && team['Leistung Prozent']==='') neu.wNote=Math.max(0,Math.min(1,1-neu.wTraining));
+        const standardformation=str(team['Standardformation']);
+        if(standardformation && FORMATIONEN[standardformation]) neu.formation=standardformation;
 
-        const br=sheetRows('Bewertungen').filter(r=>String(r['Spiel Nr']||'').trim() && String(r['Spieler']||'').trim());
-        if(br.length){
-          neu.noten={};
-          neu.spielPositionen={};
-          br.forEach(r=>{
-            const nr=Number(r['Spiel Nr']); const name=String(r['Spieler']).trim(); const note=Number(String(r['Note']).replace(',','.'));
-            if(!Number.isFinite(nr) || !Number.isFinite(note) || !neu.spieler.some(s=>s.name===name)) return;
-            const key='g'+nr;
-            neu.noten[key]={...(neu.noten[key]||{}),[name]:Math.max(0,Math.min(10,note))};
-            const pos=String(r['Position']||'').trim().toUpperCase();
-            if(pos) neu.spielPositionen[key]={...(neu.spielPositionen[key]||{}),[name]:pos};
-          });
-        }
+        // Trainer dienen der Dokumentation/Zuordnung. Auth-Konten werden bewusst nicht aus Excel erstellt.
+        neu.trainerInfo=sheetRows('Trainer').filter(r=>str(r['E-Mail'])).map(r=>({
+          name:str(r['Name']), email:str(r['E-Mail']).toLowerCase(), rolle:str(r['Rolle'])||'trainer'
+        }));
 
-        // Alte Trainer-Einzelnoten passen nach einem Vollimport nicht zwingend zum neuen Kader.
+        // Trainings: eine Zeile je Datum/Spieler.
+        const trainingsRows=sheetRows('Trainings').filter(r=>datum(r['Datum']));
+        const trainingsByDate=new Map();
+        trainingsRows.forEach(r=>{
+          const dt=datum(r['Datum']);
+          if(!trainingsByDate.has(dt)) trainingsByDate.set(dt,[]);
+          const name=str(r['Spieler']);
+          if(name && spielerNamen.has(name) && yes(r['Anwesend'],false)) trainingsByDate.get(dt).push(name);
+        });
+        neu.trainings=[...trainingsByDate.keys()].sort().map((dt,i)=>({id:`imp-t-${i+1}-${dt}`,datum:dt}));
+        neu.anwesend={};
+        neu.trainings.forEach(t=>{
+          neu.anwesend[t.id]=[...new Set(trainingsByDate.get(t.datum)||[])];
+        });
+
+        // Spiele + Berichte
+        const spieleRows=sheetRows('Spiele').filter(r=>str(r['Gegner']));
+        neu.spiele=spieleRows.map((r,i)=>({
+          nr:Math.max(1,Math.round(num(r['Nr'],i+1))),
+          datum:datum(r['Datum']),
+          zeit:str(r['Uhrzeit']),
+          gegner:str(r['Gegner']),
+          ha:str(r['H/A']).toUpperCase(),
+          wb:str(r['Wettbewerb']),
+          tf:str(r['Tore'])===''?null:Math.max(0,Math.round(num(r['Tore'],0))),
+          tg:str(r['Gegentore'])===''?null:Math.max(0,Math.round(num(r['Gegentore'],0))),
+        })).sort((a,b)=>(a.datum||'9999-99-99').localeCompare(b.datum||'9999-99-99')||a.nr-b.nr);
+        const spielNummern=new Set(neu.spiele.map(s=>s.nr));
+        neu.spielberichte={};
+        spieleRows.forEach((r,i)=>{
+          const nr=Math.max(1,Math.round(num(r['Nr'],i+1)));
+          if(!spielNummern.has(nr)) return;
+          const text=str(r['Spielbericht']);
+          const kommentar=str(r['Trainer-Kommentar']);
+          if(text || kommentar) neu.spielberichte['g'+nr]={text,kommentar,stats:{}};
+        });
+
+        // Bewertungen: mehrere Trainer pro Spieler/Spiel werden einzeln gespeichert und gemittelt.
         neu.trainerNoten={};
+        neu.noten={};
+        neu.spielPositionen={};
+        const bewRows=sheetRows('Bewertungen').filter(r=>str(r['Spiel Nr']) && str(r['Spieler']) && str(r['Note'])!=='');
+        bewRows.forEach(r=>{
+          const nr=Math.round(num(r['Spiel Nr'],NaN));
+          const name=str(r['Spieler']);
+          const note=Math.max(0,Math.min(10,num(r['Note'],NaN)));
+          if(!Number.isFinite(nr) || !Number.isFinite(note) || !spielNummern.has(nr) || !spielerNamen.has(name)) return;
+          const key='g'+nr;
+          const email=str(r['Trainer E-Mail']).toLowerCase()||'import';
+          const trainerId='import:'+email;
+          neu.trainerNoten[key]={...(neu.trainerNoten[key]||{})};
+          neu.trainerNoten[key][name]={...(neu.trainerNoten[key][name]||{}),[trainerId]:{value:note,email}};
+          const pos=str(r['Position']).toUpperCase();
+          if(pos) neu.spielPositionen[key]={...(neu.spielPositionen[key]||{}),[name]:pos};
+        });
+        Object.entries(neu.trainerNoten).forEach(([key,spielerMap])=>{
+          neu.noten[key]={};
+          Object.entries(spielerMap).forEach(([name,trainerMap])=>{
+            const werte=Object.values(trainerMap).map(x=>Number(x?.value)).filter(Number.isFinite);
+            if(werte.length) neu.noten[key][name]=werte.reduce((a,b)=>a+b,0)/werte.length;
+          });
+        });
+
+        // Tore, Assists und Gelbe Karten
+        const statRows=sheetRows('Spielstatistik').filter(r=>str(r['Spiel Nr']) && str(r['Spieler']));
+        statRows.forEach(r=>{
+          const nr=Math.round(num(r['Spiel Nr'],NaN));
+          const name=str(r['Spieler']);
+          if(!Number.isFinite(nr) || !spielNummern.has(nr) || !spielerNamen.has(name)) return;
+          const key='g'+nr;
+          const b=neu.spielberichte[key] || {text:'',kommentar:'',stats:{}};
+          b.stats={...(b.stats||{}),[name]:{
+            tore:Math.max(0,Math.round(num(r['Tore'],0))),
+            vorlagen:Math.max(0,Math.round(num(r['Assists'],0))),
+            gelb:Math.max(0,Math.round(num(r['Gelbe Karten'],0))),
+          }};
+          neu.spielberichte[key]=b;
+        });
+
+        // Optionale manuelle Aufstellung. Excel-Slot 1 entspricht App-Slot 0.
         neu.elf={};
-        neu.aenderungen=[];
+        const aufRows=sheetRows('Aufstellung').filter(r=>str(r['Formation']) && str(r['Slot']) && str(r['Spieler']));
+        aufRows.forEach(r=>{
+          const formation=str(r['Formation']);
+          const slot=Math.round(num(r['Slot'],NaN))-1;
+          const name=str(r['Spieler']);
+          if(!FORMATIONEN[formation] || !Number.isInteger(slot) || slot<0 || slot>=FORMATIONEN[formation].length || !spielerNamen.has(name)) return;
+          neu.elf[formation+':'+slot]=name;
+        });
+
+        const ok=window.confirm(`Excel-Import übernehmen?\n\n${neu.spieler.length} Spieler\n${neu.trainings.length} Trainings\n${neu.spiele.length} Spiele\n\nDer bisherige Team-Datenstand wird ersetzt.`);
+        if(!ok) return;
+
         save(neu,`HAQQ Excel-Vorlage importiert: ${file.name}`);
         alert(`Import erfolgreich: ${neu.spieler.length} Spieler, ${neu.trainings.length} Trainings, ${neu.spiele.length} Spiele.`);
         return;
       }
 
-      // CSV-Fallback: Spieler-Stammdaten mit den gleichen Spalten wie im Blatt "Spieler".
       if(ext==='csv') {
         const text=await file.text();
         const lines=text.split(/\r?\n/).filter(Boolean);
         if(lines.length<2) throw new Error('CSV ist leer');
         const sep=lines[0].includes(';')?';':',';
-        const headers=lines[0].split(sep).map(x=>x.replace(/^"|"$/g,'').trim());
+        const headers=lines[0].split(sep).map(x=>x.replace(/^"|"$/g,'').trim().replace(/\*+$/,'').trim());
         const rows=lines.slice(1).map(line=>{
           const vals=line.split(sep).map(x=>x.replace(/^"|"$/g,'').trim());
           return Object.fromEntries(headers.map((h,i)=>[h,vals[i]??'']));
-        }).filter(r=>r.Name);
+        }).filter(r=>str(r['Name']));
         if(!rows.length) throw new Error('Keine Spieler gefunden');
-        neu.spieler=rows.map(r=>({
-          name:r.Name.trim(), haupt:(r.Hauptposition||'').toUpperCase(), neben:String(r.Nebenpositionen||'').split('|').map(x=>x.trim().toUpperCase()).filter(Boolean),
-          posStaerke:{}, sperre:Number(r.Sperre||0)||0, verfuegbar:true, fix:false, dabeiSeit:(r['Dabei seit']||heute()).slice(0,10), aktivBis:'', aktiv:true
-        }));
-        neu.spieler.forEach(s=>{ if(s.haupt)s.posStaerke[s.haupt]=100; s.neben.forEach(p=>{if(p!==s.haupt)s.posStaerke[p]=70}); });
+        neu.spieler=rows.map(r=>{
+          const haupt=str(r['Hauptposition']).toUpperCase();
+          const neben=split(r['Nebenpositionen']).map(x=>x.toUpperCase()).filter(x=>x && x!==haupt);
+          return {name:str(r['Name']),trikotnummer:str(r['Trikotnummer']),haupt,neben,posStaerke:parseStaerken(r['Positionsstärken'],haupt,neben),dabeiSeit:datum(r['Dabei seit'])||heute(),aktivBis:datum(r['Aktiv bis']),aktiv:yes(r['Aktiv'],true),verfuegbar:yes(r['Verfügbar'],true),fix:yes(r['Fix'],false),sperre:Math.max(0,Math.round(num(r['Sperre'],0)))};
+        }).sort((a,b)=>a.name.localeCompare(b.name,'de'));
+        const ok=window.confirm(`CSV-Import übernehmen?\n\n${neu.spieler.length} Spieler\n\nDer bisherige Kader wird ersetzt.`);
+        if(!ok) return;
         save(neu,`CSV importiert: ${file.name}`);
         alert(`Import erfolgreich: ${neu.spieler.length} Spieler.`);
         return;
       }
 
-      throw new Error('Bitte .xlsx, .xls oder .csv verwenden.');
+      throw new Error('Dateityp nicht unterstützt');
     } catch(e) {
       console.error(e);
-      alert(`Import fehlgeschlagen: ${e?.message || 'Datei nicht erkannt'}`);
+      alert(`Import fehlgeschlagen: ${e?.message || 'Datei konnte nicht gelesen werden.'}`);
     }
   };
   return <div className="pb-24"><Kopf titel="Verlauf & Export" rechts={<div className="flex gap-2"><label className="text-sm font-bold px-3 py-1.5 rounded-full cursor-pointer" style={{background:'#fff',color:C.rot,border:`1px solid ${C.rot}`}}>Import<input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" className="hidden" onChange={(e)=>{excelImport(e.target.files?.[0]);e.target.value=''}}/></label><button onClick={excelExport} className="text-sm font-bold px-3 py-1.5 rounded-full" style={{background:C.rot,color:'#fff'}}>Excel Export</button></div>}/><div className="px-4 pb-3 text-sm" style={{color:C.grau}}>Import: HAQQ-Team-Vorlage (.xlsx/.xls) oder CSV. Die Vorlage kann Spieler, Trainings, Spiele und Bewertungen auf einmal einlesen.</div><div style={{borderTop:`1px solid ${C.linie}`}}>{(d.aenderungen||[]).length?(d.aenderungen||[]).map(x=><div key={x.id} className="px-4 py-3" style={{borderBottom:`1px solid ${C.linie}`}}><div className="font-bold">{x.aktion}</div><div className="text-xs mt-1" style={{color:C.grau}}>{x.trainer} · {new Date(x.zeit).toLocaleString('de-DE')}</div></div>):<div className="p-4 text-sm" style={{color:C.grau}}>Der Verlauf beginnt mit Änderungen ab Version 2.</div>}</div></div>;
